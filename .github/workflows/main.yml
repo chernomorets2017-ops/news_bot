@@ -14,8 +14,6 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          persist-credentials: true
 
       - name: Set up Python
         uses: actions/setup-python@v4
@@ -24,12 +22,12 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install pyTelegramBotAPI g4f beautifulsoup4 requests
+          pip install pyTelegramBotAPI duckduckgo_search beautifulsoup4 requests
 
       - name: Run Bot
         run: python main.py
 
-      - name: Commit changes
+      - name: Save Database and Push
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"

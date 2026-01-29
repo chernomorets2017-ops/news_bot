@@ -1,9 +1,12 @@
 import telebot
-import g4f
 import requests
 import os
 import re
 from bs4 import BeautifulSoup
+
+# Устанавливаем спец. библиотеку для стабильного ИИ
+os.system('pip install duckduckgo_search')
+from duckduckgo_search import DDGS
 
 BOT_TOKEN = "8546746980:AAF3z5K85WaBMC-SKTSTN5Tx_dXxXyZXIoQ"
 NEWS_API_KEY = "E16b35592a2147989d80d46457d4f916" 
@@ -22,45 +25,37 @@ def save_posted_link(link):
 def get_full_article(url):
     try:
         headers = {'User-Agent': 'Mozilla/5.0'}
-        response = requests.get(url, headers=headers, timeout=15)
+        response = requests.get(url, headers=headers, timeout=10)
         soup = BeautifulSoup(response.text, 'html.parser')
-        for s in soup(['script', 'style', 'nav', 'footer', 'header', 'aside', 'form', 'button']): s.decompose()
-        paragraphs = soup.find_all('p')
-        text = " ".join([p.get_text() for p in paragraphs])
+        for s in soup(['script', 'style', 'nav', 'footer', 'header', 'aside']): s.decompose()
+        text = " ".join([p.get_text() for p in soup.find_all('p')])
         return text[:3000]
     except:
         return None
 
 def rewrite_text(title, content):
     prompt = (
-        f"Сделай КРАТКИЙ пересказ новости. ЗАПРЕЩЕНО обрывать текст и ставить многоточия в конце.\n"
-        f"ЗАГОЛОВОК: {title}\n"
+        f"Напиши пост для Телеграм на основе новости.\n"
+        f"НОВОСТЬ: {title}\n"
         f"ТЕКСТ: {content}\n\n"
-        f"СТРУКТУРА:\n"
-        f"1. 🔥 **Жирный заголовок**.\n"
-        f"2. ⚡️ **Суть**: (2 предложения).\n"
-        f"3. 🚀 **Факты**: (3-4 пункта с разными смайликами).\n"
-        f"4. 💎 **Итог**: (1 законченное предложение).\n\n"
-        f"ТРЕБОВАНИЕ: Мысль должна быть закончена полностью. Никаких многоточий!"
+        f"ПРАВИЛА:\n"
+        f"1. Сначала жирный заголовок с крутым смайлом. 🔥\n"
+        f"2. Коротко суть (2-3 предложения).\n"
+        f"3. Список фактов (3 пункта, перед каждым СВОЙ жирный смайл: ⚡️, 💎, 🚀).\n"
+        f"4. Итог одним коротким предложением. БЕЗ МНОГОТОЧИЙ.\n"
+        f"НИКАКИХ ссылок и упоминаний источников!"
     )
-    
     try:
-        response = g4f.ChatCompletion.create(
-            model=g4f.models.gpt_4o_mini,
-            messages=[{"role": "user", "content": prompt}],
-            timeout=120
-        )
-        if response:
-            res = response.strip()
-            res = re.sub(r'\.{2,}|…$', '.', res)
-            if len(res) > 100:
-                return res
-        return f"<b>{title}</b>\n\n{content[:500]}."
+        # Используем DuckDuckGo AI (модель GPT-4o-mini) - она не обрывает текст
+        with DDGS() as ddgs:
+            results = ddgs.chat(prompt, model='gpt-4o-mini')
+            res = results.strip()
+            return re.sub(r'\.{2,}|…$', '.', res)
     except:
         return f"<b>{title}</b>\n\n{content[:500]}."
 
 def run():
-    url = f"https://newsapi.org/v2/everything?q=(IT OR хайп OR нейросети OR технологии)&language=ru&sortBy=publishedAt&apiKey={NEWS_API_KEY}"
+    url = f"https://newsapi.org/v2/everything?q=(IT OR хайп OR нейросети)&language=ru&sortBy=publishedAt&apiKey={NEWS_API_KEY}"
     try:
         articles = requests.get(url).json().get('articles', [])
     except:
@@ -73,7 +68,7 @@ def run():
         if link in posted: continue
         
         raw_text = get_full_article(link)
-        content = raw_text if (raw_text and len(raw_text) > 300) else art.get('description', "")
+        content = raw_text if (raw_text and len(raw_text) > 400) else art.get('description', "")
         
         if not content: continue
 

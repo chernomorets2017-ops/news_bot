@@ -1,3 +1,5 @@
+name: News Bot 24/7
+
 on:
   schedule:
     - cron: '*/10 * * * *'
@@ -20,7 +22,8 @@ jobs:
           pip install pyTelegramBotAPI g4f beautifulsoup4 requests
 
       - name: Run Bot
-        run: run: python3 ./main.py
+        run: python3 ./main.py
+
 
       - name: Commit and Push changes
         run: |
@@ -29,4 +32,3 @@ jobs:
           git add last_links.txt
           git commit -m "Update links" || exit 0
           git push
-

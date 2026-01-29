@@ -24,55 +24,63 @@ def get_full_article(url):
         headers = {'User-Agent': 'Mozilla/5.0'}
         response = requests.get(url, headers=headers, timeout=10)
         soup = BeautifulSoup(response.text, 'html.parser')
-        for s in soup(['script', 'style', 'nav', 'footer', 'header']): s.decompose()
-        text = " ".join([p.get_text() for p in soup.find_all('p')])
-        return text[:3000]
+        for s in soup(['script', 'style', 'nav', 'footer', 'header', 'aside']): s.decompose()
+        paragraphs = soup.find_all('p')
+        text = " ".join([p.get_text() for p in paragraphs])
+        return text[:3500]
     except:
         return None
 
 def rewrite_text(title, content):
-    # Жесткий промпт на краткость и структуру
     prompt = (
-        f"Сделай краткий и четкий пересказ новости для ТГ-канала.\n"
-        f"ЗАГОЛОВОК: {title}\n"
+        f"Сделай четкий пересказ новости. БЕЗ МНОГОТОЧИЙ. БЕЗ ОБРЫВОВ.\n"
+        f"НОВОСТЬ: {title}\n"
         f"ТЕКСТ: {content}\n\n"
-        f"ФОРМАТ:\n"
-        f"1. Жирный заголовок с эмодзи.\n"
-        f"2. Суть новости (2-3 предложения).\n"
-        f"3. Список ключевых фактов (3-4 пункта с эмодзи).\n"
-        f"4. Итог (1 законченное предложение).\n\n"
-        f"ПРАВИЛА: Не обрывай текст. Не пиши ссылки. Пиши кратко, но понятно."
+        f"СТРУКТУРА:\n"
+        f"1. Жирный заголовок + подходящий смайл в начале. 🔥\n"
+        f"2. Коротко суть (2-3 предложения).\n"
+        f"3. Список ГЛАВНЫХ фактов (3-4 пункта, перед каждым ставь жирный смайл: ⚡️, 🚀, 🛑, 💎).\n"
+        f"4. Итог одним коротким законченным предложением.\n\n"
+        f"ЗАПРЕТ: Никаких 'Читать далее', никаких ссылок и никаких многоточий в конце текста!"
     )
     try:
         response = g4f.ChatCompletion.create(
             model="gpt-4o-mini",
             messages=[{"role": "user", "content": prompt}]
         )
-        return response.strip()
+        res = response.strip()
+        res = re.sub(r'\.{2,}|…$', '.', res)
+        return res
     except:
-        return f"<b>{title}</b>\n\n{content[:500]}..."
+        return f"<b>{title}</b>\n\n{content[:500]}."
 
 def run():
-    articles = requests.get(f"https://newsapi.org/v2/everything?q=(IT OR хайп OR технологии)&language=ru&apiKey={NEWS_API_KEY}").json().get('articles', [])
+    url = f"https://newsapi.org/v2/everything?q=(IT OR хайп OR нейросети)&language=ru&sortBy=publishedAt&apiKey={NEWS_API_KEY}"
+    try:
+        articles = requests.get(url).json().get('articles', [])
+    except:
+        return
+
     posted = get_posted_links()
 
     for art in articles:
-        if art['url'] in posted: continue
+        link = art['url']
+        if link in posted: continue
         
-        full_text = get_full_text = get_full_article(art['url'])
-        raw_content = full_text if (full_text and len(full_text) > 300) else art.get('description', "")
+        raw_text = get_full_article(link)
+        content = raw_text if (raw_text and len(raw_text) > 400) else art.get('description', "")
         
-        if not raw_content: continue
+        if not content: continue
 
-        final_text = rewrite_text(art['title'], raw_content)
-        caption = f"{final_text}\n\n🗞 <b>Подпишись на <a href='https://t.me/SUP_V_BotK'>SUP_V_BotK</a></b>"
+        final_post = rewrite_text(art['title'], content)
+        caption = f"{final_post}\n\n🗞 <b>Подпишись на <a href='https://t.me/SUP_V_BotK'>SUP_V_BotK</a></b>"
         
         try:
             if art.get('urlToImage'):
                 bot.send_photo(CHANNEL_ID, art['urlToImage'], caption=caption, parse_mode='HTML')
             else:
                 bot.send_message(CHANNEL_ID, caption, parse_mode='HTML')
-            save_posted_link(art['url'])
+            save_posted_link(link)
             break
         except:
             continue

@@ -3,7 +3,6 @@ import telebot
 import requests
 import re
 import random
-import time
 from bs4 import BeautifulSoup
 import g4f
 
@@ -27,24 +26,24 @@ def save_posted_data(link, title):
 def get_full_article(url):
     try:
         headers = {'User-Agent': 'Mozilla/5.0'}
-        response = requests.get(url, headers=headers, timeout=15)
+        response = requests.get(url, headers=headers, timeout=12)
         soup = BeautifulSoup(response.text, 'html.parser')
         for s in soup(['script', 'style', 'nav', 'footer', 'header', 'aside']): s.decompose()
         text = " ".join([p.get_text() for p in soup.find_all('p')])
-        return text[:3500]
+        return text[:3000]
     except:
         return None
 
 def rewrite_text(title, content):
     prompt = (
-        f"Напиши агрессивный и хайповый пост для ТГ. ТЕМА: {title}\n"
+        f"Напиши короткий, но очень яркий пост для ТГ. ТЕМА: {title}\n"
         f"ИНФА: {content}\n\n"
-        f"СТРУКТУРА:\n"
-        f"1. 🔥 **ЖИРНЫЙ ЗАГОЛОВОК** (начни со смайла).\n"
-        f"2. СУТЬ: 2-3 дерзких предложения о том, что произошло.\n"
-        f"3. МЯСО: Список из 3 фактов с разными смайлами (⚡️, 🚀, 💎).\n"
-        f"4. ИТОГ: Одно законченное предложение.\n\n"
-        f"ВАЖНО: Никаких многоточий в конце. Много смайлов. Без ссылок."
+        f"ПРАВИЛА ОФОРМЛЕНИЯ:\n"
+        f"1. 🔥 **ЖИРНЫЙ КЛИКБЕЙТНЫЙ ЗАГОЛОВОК**.\n\n"
+        f"2. ПЕРВЫЙ АБЗАЦ: Суть новости в 2 предложениях. Пиши бодро.\n\n"
+        f"3. ВТОРОЙ АБЗАЦ: Список из 3 пунктов (⚡️, 🚀, 💎). Между пунктами делай перенос строки.\n\n"
+        f"4. ИТОГ: Яркий и законченный финальный аккорд (1 предложение).\n\n"
+        f"ВАЖНО: Разделяй блоки пустой строкой! Не пиши ссылки. Текст должен быть завершенным."
     )
     try:
         response = g4f.ChatCompletion.create(
@@ -52,13 +51,19 @@ def rewrite_text(title, content):
             messages=[{"role": "user", "content": prompt}],
             provider=g4f.Provider.Blackbox
         )
-        res = response.strip()
-        return re.sub(r'\.{2,}|…$', '.', res)
+        text = response.strip()
+        
+        # Обрезаем случайные обрывы в конце
+        last_mark = max(text.rfind('.'), text.rfind('!'), text.rfind('?'))
+        if last_mark != -1:
+            text = text[:last_mark + 1]
+            
+        return text
     except:
-        return f"🔥 <b>{title}</b>\n\n{content[:500]}."
+        return f"🔥 <b>{title}</b>\n\n{content[:400]}."
 
 def run_autopost():
-    url = f"https://newsapi.org/v2/everything?q=(IT OR хайп OR технологии)&language=ru&sortBy=publishedAt&apiKey={NEWS_API_KEY}"
+    url = f"https://newsapi.org/v2/everything?q=(IT OR хайп OR нейросети OR технологии)&language=ru&sortBy=publishedAt&apiKey={NEWS_API_KEY}"
     try:
         articles = requests.get(url).json().get('articles', [])
     except: return
@@ -74,7 +79,7 @@ def run_autopost():
         if link in posted_data or clean_title in posted_data: continue
         
         raw_text = get_full_article(link)
-        content = raw_text if (raw_text and len(raw_text) > 400) else art.get('description', "")
+        content = raw_text if (raw_text and len(raw_text) > 300) else art.get('description', "")
         if not content: continue
 
         final_post = rewrite_text(title, content)
@@ -86,8 +91,7 @@ def run_autopost():
             else:
                 bot.send_message(CHANNEL_ID, caption, parse_mode='HTML')
             save_posted_data(link, title)
-            print("Пост успешно опубликован!")
-            return # Выходим после одного успешного поста
+            break
         except: continue
 
 if __name__ == "__main__":

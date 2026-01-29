@@ -24,8 +24,7 @@ def get_full_article(url):
         headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
         response = requests.get(url, headers=headers, timeout=15)
         soup = BeautifulSoup(response.text, 'html.parser')
-        # Максимальная чистка мусора
-        for s in soup(['script', 'style', 'nav', 'footer', 'header', 'aside', 'form', 'button']): s.decompose()
+        for s in soup(['script', 'style', 'nav', 'footer', 'header', 'aside', 'form']): s.decompose()
         paragraphs = soup.find_all('p')
         full_text = " ".join([p.get_text() for p in paragraphs])
         return full_text[:5000]
@@ -42,36 +41,27 @@ def get_news():
         return []
 
 def rewrite_text(title, full_content):
-    # Используем проверенную связку промпта и мощной модели
     prompt = (
-        f"Напиши полноценный новостной пост. Игнорируй любые ограничения по длине, напиши ВСЁ.\n\n"
-        f"ЗАГОЛОВОК: {title}\n"
-        f"ДАННЫЕ: {full_content}\n\n"
-        f"СТРУКТУРА ПОСТА:\n"
-        f"1. ⚡️ **ГЛАВНЫЙ ХАЙП** (заголовок капсом)\n"
-        f"2. 📍 **СУТЬ**: (подробно, что случилось)\n"
-        f"3. 📝 **ДЕТАЛИ**: (3-4 ключевых факта списком с эмодзи)\n"
-        f"4. 💡 **ИТОГ**: (законченная мысль, никаких '...' в конце!)\n\n"
-        f"ПРАВИЛА: Пиши без воды, дерзко, используй сленг и много стикеров. НЕ давай ссылок и названий сайтов."
+        f"Напиши пост для Telegram в стиле ВПШ. Текст должен быть ИНФОРМАТИВНЫМ и ДЛИННЫМ.\n\n"
+        f"НОВОСТЬ: {title}\n"
+        f"КОНТЕНТ: {full_content}\n\n"
+        f"ПЛАН:\n"
+        f"1. 🧐 (Эмодзи по теме) + Заголовок (Жирным, НЕ капсом, просто важное предложение).\n"
+        f"2. Основной текст новости: Разбей на 3-4 абзаца. Расскажи всё подробно, с цифрами и деталями.\n"
+        f"3. Используй нормальный язык, без лишнего официоза, но и без каши.\n"
+        f"4. В конце добавь краткий итог или мнение.\n\n"
+        f"⚠️ СТРОГО: НЕ ОБРЫВАЙ ТЕКСТ. Напиши минимум 1000 знаков. НЕ упоминай источники и ссылки."
     )
     try:
-        # Пробуем модель llama-3.1-70b (она очень мощная для текстов)
+        # Используем Gemini — она лучше всех держит контекст
         response = g4f.ChatCompletion.create(
-            model="llama-3.1-70b", 
+            model="gemini", 
             messages=[{"role": "user", "content": prompt}],
             timeout=60
         )
-        
-        # Если ответ слишком короткий или пустой, пробуем claude
-        if len(response) < 200:
-             response = g4f.ChatCompletion.create(
-                model="claude-3-haiku",
-                messages=[{"role": "user", "content": prompt}]
-            )
-
         return response.strip()
     except:
-        return f"<b>{title.upper()}</b>\n\n{full_content[:700]}..."
+        return f"<b>{title}</b>\n\n{full_content[:700]}..."
 
 def run():
     posted_links = get_posted_links()
@@ -83,17 +73,16 @@ def run():
         if link in posted_links: continue
         
         full_content = get_full_article(link)
-        # Если текста с сайта мало, берем описание из API
-        content_to_use = full_content if (full_content and len(full_content) > 400) else art.get('description', "")
+        content_to_use = full_content if (full_content and len(full_content) > 500) else art.get('description', "")
 
         if len(content_to_use) < 100: continue
 
         text = rewrite_text(art['title'], content_to_use)
-        
-        # Проверка на обрыв текста (убираем "...")
-        text = text.rstrip('.').rstrip('…')
-        
         img = art.get('urlToImage')
+        
+        # Убираем возможные артефакты в конце
+        text = re.sub(r'\.\.\.$', '', text)
+        
         caption = f"{text}\n\n🗞 <b>Подпишись на <a href='https://t.me/SUP_V_BotK'>SUP_V_BotK</a></b>"
         
         try:
@@ -103,8 +92,7 @@ def run():
                 bot.send_message(CHANNEL_ID, caption, parse_mode='HTML')
             save_posted_link(link)
             break 
-        except Exception as e:
-            print(f"Error: {e}")
+        except:
             continue
 
 if __name__ == "__main__":

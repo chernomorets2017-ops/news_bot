@@ -21,41 +21,55 @@ def save_posted_link(link):
 
 def get_full_article(url):
     try:
-        headers = {'User-Agent': 'Mozilla/5.0'}
-        response = requests.get(url, headers=headers, timeout=10)
+        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
+        response = requests.get(url, headers=headers, timeout=15)
         soup = BeautifulSoup(response.text, 'html.parser')
-        for s in soup(['script', 'style', 'nav', 'footer', 'header', 'aside']): s.decompose()
+        for s in soup(['script', 'style', 'nav', 'footer', 'header', 'aside', 'form', 'button']): s.decompose()
         paragraphs = soup.find_all('p')
         text = " ".join([p.get_text() for p in paragraphs])
-        return text[:3500]
+        return text[:4000]
     except:
         return None
 
 def rewrite_text(title, content):
-    prompt = (
-        f"Сделай четкий пересказ новости. БЕЗ МНОГОТОЧИЙ. БЕЗ ОБРЫВОВ.\n"
-        f"НОВОСТЬ: {title}\n"
-        f"ТЕКСТ: {content}\n\n"
-        f"СТРУКТУРА:\n"
-        f"1. Жирный заголовок + подходящий смайл в начале. 🔥\n"
-        f"2. Коротко суть (2-3 предложения).\n"
-        f"3. Список ГЛАВНЫХ фактов (3-4 пункта, перед каждым ставь жирный смайл: ⚡️, 🚀, 🛑, 💎).\n"
-        f"4. Итог одним коротким законченным предложением.\n\n"
-        f"ЗАПРЕТ: Никаких 'Читать далее', никаких ссылок и никаких многоточий в конце текста!"
+    full_prompt = (
+        f"Ты — профессиональный редактор новостного Telegram-канала. Твоя задача — сделать качественный и законченный пересказ новости.\n\n"
+        f"ЗАГОЛОВОК НОВОСТИ: {title}\n"
+        f"ИСХОДНЫЙ ТЕКСТ: {content}\n\n"
+        f"ИНСТРУКЦИЯ ПО ОФОРМЛЕНИЮ:\n"
+        f"1. Начни с жирного заголовка и тематического эмодзи (например, 🔥, ⚡️, 🚀).\n"
+        f"2. Первый блок: Суть новости в 2-3 предложениях.\n"
+        f"3. Второй блок: Ключевые подробности и интересные факты списком. Используй разные эмодзи-маркеры (✅, 📍, 🔍).\n"
+        f"4. Третий блок: Итог или вывод одним предложением.\n\n"
+        f"ЖЕСТКИЕ ТРЕБОВАНИЯ:\n"
+        f"- ПИШИ ДО КОНЦА. Текст не должен обрываться на полуслове или заканчиваться многоточием.\n"
+        f"- НИКАКИХ ссылок на сайты и фраз типа 'сообщает источник'.\n"
+        f"- Используй много эмодзи, чтобы пост выглядел живым.\n"
+        f"- Общий объем текста: от 600 до 1000 знаков.\n"
+        f"- Если не хватает данных, просто красиво заверши мысль на основе того, что есть."
     )
-    try:
-        response = g4f.ChatCompletion.create(
-            model="gpt-4o-mini",
-            messages=[{"role": "user", "content": prompt}]
-        )
-        res = response.strip()
-        res = re.sub(r'\.{2,}|…$', '.', res)
-        return res
-    except:
-        return f"<b>{title}</b>\n\n{content[:500]}."
+    
+    providers = [g4f.Provider.Blackbox, g4f.Provider.ChatGptEs, g4f.Provider.DarkAI]
+    
+    for provider in providers:
+        try:
+            response = g4f.ChatCompletion.create(
+                model="gpt-4o",
+                provider=provider,
+                messages=[{"role": "user", "content": full_prompt}],
+                timeout=60
+            )
+            if response and len(response) > 100:
+                res = response.strip()
+                res = re.sub(r'\.{2,}|…$', '.', res)
+                return res
+        except:
+            continue
+            
+    return f"<b>{title}</b>\n\n{content[:500]}."
 
 def run():
-    url = f"https://newsapi.org/v2/everything?q=(IT OR хайп OR нейросети)&language=ru&sortBy=publishedAt&apiKey={NEWS_API_KEY}"
+    url = f"https://newsapi.org/v2/everything?q=(IT OR технологии OR нейросети OR блогеры)&language=ru&sortBy=publishedAt&apiKey={NEWS_API_KEY}"
     try:
         articles = requests.get(url).json().get('articles', [])
     except:
@@ -70,7 +84,7 @@ def run():
         raw_text = get_full_article(link)
         content = raw_text if (raw_text and len(raw_text) > 400) else art.get('description', "")
         
-        if not content: continue
+        if not content or len(content) < 100: continue
 
         final_post = rewrite_text(art['title'], content)
         caption = f"{final_post}\n\n🗞 <b>Подпишись на <a href='https://t.me/SUP_V_BotK'>SUP_V_BotK</a></b>"

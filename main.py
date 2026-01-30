@@ -30,33 +30,35 @@ def get_full_article(url):
         soup = BeautifulSoup(response.text, 'html.parser')
         for s in soup(['script', 'style', 'nav', 'footer', 'header', 'aside']): s.decompose()
         text = " ".join([p.get_text() for p in soup.find_all('p')])
-        return text[:1500]
+        return text[:2000]
     except:
         return None
 
 def rewrite_text(title, content):
     prompt = (
-        f"Ты редактор ТГ-канала. Сделай сверхкраткий пересказ.\n\n"
-        f"ТЕМА: {title}\n"
-        f"ТЕКСТ: {content}\n\n"
+        f"Ты — новостной редактор. Напиши ОДИН пост по теме: {title}\n"
+        f"ИСХОДНИК: {content[:1500]}\n\n"
+        f"ЗАДАЧА:\n"
+        f"1. Напиши жирный заголовок с 🔥.\n"
+        f"2. В 2-3 предложениях расскажи саму СУТЬ новости (что случилось).\n"
+        f"3. Добавь 2 ключевых факта через ⚡️.\n"
+        f"4. Заверши мысль точкой.\n\n"
         f"ПРАВИЛА:\n"
-        f"1. 🔥 Жирный заголовок.\n"
-        f"2. Суть новости (1-2 предложения).\n"
-        f"3. 2 факта со смайлами ⚡️.\n"
-        f"4. Итог одной фразой.\n\n"
-        f"ТРЕБОВАНИЯ: Максимум 300 символов. Разделяй блоки пустой строкой. "
-        f"Никаких ссылок. Текст должен быть закончен полностью."
+        f"- ПИШИ НОВОСТЬ, а не анонс.\n"
+        f"- Не используй фразы 'в этой статье говорится' или 'узнайте подробнее'.\n"
+        f"- Текст до 400 знаков. Разделяй абзацы пустой строкой."
     )
     try:
         with DDGS() as ddgs:
             response = ddgs.chat(prompt, model='gpt-4o-mini')
             text = response.strip()
+            text = text.replace("Вот новостной пост:", "").replace("Вот краткий пересказ:", "").strip()
             last_mark = max(text.rfind('.'), text.rfind('!'), text.rfind('?'))
             if last_mark != -1:
                 text = text[:last_mark + 1]
             return text
     except:
-        return f"🔥 <b>{title}</b>\n\nКоротко: важное обновление в сфере технологий. Читайте подробности в посте!"
+        return f"🔥 <b>{title}</b>\n\n{content[:300]}..."
 
 def run():
     url = f"https://newsapi.org/v2/everything?q=(IT OR нейросети OR технологии)&language=ru&sortBy=publishedAt&apiKey={NEWS_API_KEY}"
@@ -75,11 +77,10 @@ def run():
         if link in posted_data or clean_title in posted_data: continue
         
         raw_text = get_full_article(link)
-        content = raw_text if (raw_text and len(raw_text) > 300) else art.get('description', "")
+        content = raw_text if (raw_text and len(raw_text) > 200) else art.get('description', "")
         if not content: continue
 
         final_post = rewrite_text(title, content)
-        if len(final_post) < 100: continue
 
         caption = f"{final_post}\n\n🗞 <b>Подпишись на <a href='https://t.me/SUP_V_BotK'>SUP_V_BotK</a></b>"
         

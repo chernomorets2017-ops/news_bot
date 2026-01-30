@@ -29,85 +29,68 @@ def get_full_article(url):
         response = requests.get(url, headers=headers, timeout=10)
         soup = BeautifulSoup(response.text, 'html.parser')
         for s in soup(['script', 'style', 'nav', 'footer', 'header', 'aside']): s.decompose()
-        text = " ".join([p.get_text() for p in soup.find_all('p')])
-        return text[:2500]
+        return " ".join([p.get_text() for p in soup.find_all('p')])[:2500]
     except:
         return None
 
-def rewrite_text(title, content):
+def rewrite_to_caption(title, content):
     url = "https://openrouter.ai/api/v1/chat/completions"
-    headers = {
-        "Authorization": f"Bearer {OR_TOKEN}",
-        "Content-Type": "application/json"
-    }
+    headers = {"Authorization": f"Bearer {OR_TOKEN}", "Content-Type": "application/json"}
     
-    payload = {
-        "model": "google/gemini-flash-1.5-exp",
-        "messages": [
-            {
-                "role": "user",
-                "content": (
-                    f"перескажи новость как настоящий редактор популярного тгк\n\n"
-                    f"ЗАГОЛОВОК: {title}\n"
-                    f"ДАННЫЕ: {content[:1800]}\n\n"
-                    f"ФОРМАТ:\n"
-                    f"1. Жирный заголовок с эмодзи в начале.\n"
-                    f"2. Суть новости в 2-3 коротких абзацах.\n"
-                    f"3. Список важных фактов через •.\n"
-                    f"4. Вывод или совет в конце.\n"
-                    f"5. Хайповые хештеги."
-                )
-            }
-        ],
-        "temperature": 0.8
-    }
+    prompt = (
+        f"Ты редактор ТГ-канала. Напиши сочный CAPTION для фото по этой новости.\n\n"
+        f"НОВОСТЬ: {title}\n"
+        f"КОНТЕНТ: {content[:1500]}\n\n"
+        f"СТРУКТУРА ПОДПИСИ:\n"
+        f"1. 🔥 ХАЙПОВЫЙ ЗАГОЛОВОК (капсом).\n"
+        f"2. СУТЬ: 2-3 коротких и дерзких предложения.\n"
+        f"3. ПОДРОБНОСТИ: 3 важных факта через буллиты •.\n"
+        f"4. ПРИЗЫВ: Острый вопрос или совет читателю.\n"
+        f"5. ХЕШТЕГИ.\n\n"
+        f"ВАЖНО: Пиши без лишних слов, только готовый текст для подписи. Максимум 900 знаков."
+    )
     
     try:
-        response = requests.post(url, headers=headers, json=payload, timeout=20)
-        result = response.json()
-        return result['choices'][0]['message']['content'].strip()
+        response = requests.post(url, headers=headers, json={
+            "model": "google/gemini-flash-1.5",
+            "messages": [{"role": "user", "content": prompt}],
+            "temperature": 0.9
+        }, timeout=25)
+        return response.json()['choices'][0]['message']['content'].strip()
     except:
-        return f"🔥 <b>{title}</b>\n\n{content[:300]}..."
+        return None
 
 def run():
-    q = "(YouTube OR TikTok OR VK OR блогер OR скандал OR ЧП OR инцидент OR новости OR политика)"
-    url = f"https://newsapi.org/v2/everything?q={q}&language=ru&sortBy=publishedAt&apiKey={NEWS_API_KEY}"
-    
+    api_url = f"https://newsapi.org/v2/everything?q=(YouTube OR TikTok OR скандал OR ЧП OR блогер OR новости)&language=ru&sortBy=publishedAt&apiKey={NEWS_API_KEY}"
     try:
-        articles = requests.get(url).json().get('articles', [])
+        articles = requests.get(api_url).json().get('articles', [])
     except: return
     
     posted_data = get_posted_data()
     random.shuffle(articles)
     
     for art in articles:
-        link = art['url']
-        title = art['title']
+        link, title = art['url'], art['title']
         clean_title = re.sub(r'[^\w\s]', '', title).lower().strip()
         
         if link in posted_data or clean_title in posted_data: continue
         
-        raw_text = get_full_article(link)
-        content = raw_text if (raw_text and len(raw_text) > 300) else art.get('description', "")
-        if not content: continue
+        content = get_full_article(link) or art.get('description', "")
+        if len(content) < 300: continue
         
-        final_post = rewrite_text(title, content)
-        if not final_post or len(final_post) < 100: continue
+        caption_text = rewrite_to_caption(title, content)
+        if not caption_text or len(caption_text) < 150: continue
         
-        caption = f"{final_post}\n\n🗞 <b>Подпишись на <a href='https://t.me/SUP_V_BotK'>SUP_V_BotK</a></b>"
+        full_caption = f"{caption_text}\n\n🗞 <b>Подпишись на <a href='https://t.me/SUP_V_BotK'>SUP_V_BotK</a></b>"
         
-        if len(caption) > 1024:
-            caption = caption[:1020] + "..."
-            
         try:
             if art.get('urlToImage'):
-                bot.send_photo(CHANNEL_ID, art['urlToImage'], caption=caption, parse_mode='HTML')
+                bot.send_photo(CHANNEL_ID, art['urlToImage'], caption=full_caption[:1024], parse_mode='HTML')
             else:
-                bot.send_message(CHANNEL_ID, caption, parse_mode='HTML')
+                bot.send_message(CHANNEL_ID, full_caption, parse_mode='HTML', disable_web_page_preview=False)
             save_posted_data(link, title)
             break
-        except:
-            continue
+        except: continue
 
 if __name__ == "__main__":
     run()

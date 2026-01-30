@@ -35,9 +35,8 @@ def get_full_article(url):
         return None
 
 def rewrite_text(title, content):
-    # Промпт теперь более свободный, чтобы ИИ не зажимался
     prompt = (
-        f"Напиши новостной пост для Телеграм на основе этих данных.\n\n"
+        f"Напиши новостной пост для Телеграм.\n\n"
         f"ЗАГОЛОВОК: {title}\n"
         f"ИНФО: {content[:1500]}\n\n"
         f"ПРАВИЛА:\n"
@@ -49,10 +48,8 @@ def rewrite_text(title, content):
     )
     try:
         with DDGS() as ddgs:
-            # Модель o3-mini или gpt-4o-mini выберется автоматически, они стабильны
             response = ddgs.chat(prompt, model='gpt-4o-mini')
             res = response.strip()
-            # Убираем только вводные слова ИИ
             res = re.sub(r'^(Вот|Ваш|Пост|Пересказ).*?:', '', res, flags=re.IGNORECASE).strip()
             return res
     except:
@@ -78,7 +75,6 @@ def run():
 
         final_post = rewrite_text(title, content)
         
-        # Теперь пропускаем почти всё, если текст есть
         if not final_post or len(final_post) < 100: continue
 
         caption = f"{final_post}\n\n🗞 <b>Подпишись на <a href='https://t.me/SUP_V_BotK'>SUP_V_BotK</a></b>"
@@ -91,7 +87,6 @@ def run():
             save_posted_data(link, title)
             break
         except:
-            # Если не вышло с фото, шлем текстом
             bot.send_message(CHANNEL_ID, caption, parse_mode='HTML')
             save_posted_data(link, title)
             break

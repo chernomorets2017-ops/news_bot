@@ -30,37 +30,33 @@ def get_full_article(url):
         soup = BeautifulSoup(response.text, 'html.parser')
         for s in soup(['script', 'style', 'nav', 'footer', 'header', 'aside']): s.decompose()
         text = " ".join([p.get_text() for p in soup.find_all('p')])
-        return text[:2500]
+        return text[:1000]
     except:
         return None
 
 def rewrite_text(title, content):
     prompt = (
-        f"Ты — редактор топового новостного ТГ-канала. Сделай подробный и полезный пересказ.\n\n"
-        f"ЗАГОЛОВОК: {title}\n"
-        f"ТЕКСТ: {content[:1500]}\n\n"
-        f"ПРАВИЛА ОФОРМЛЕНИЯ:\n"
-        f"1. 💰 Жирный заголовок: четкая суть.\n"
-        f"2. Подробное вступление (что случилось).\n"
-        f"3. Список ключевых фактов через буллиты (•).\n"
-        f"4. Блок 'Главное для читателя': что нужно знать.\n"
-        f"5. В конце добавь уместные хештеги.\n\n"
-        f"ТРЕБОВАНИЯ: Пиши информативно. Не обрывай текст. Лимит 800 знаков."
+        f"Напиши новость для ТГ: {title}\n\n"
+        f"СУТЬ: {content}\n\n"
+        f"ОФОРМЛЕНИЕ:\n"
+        f"1. 🔥 Жирный заголовок.\n"
+        f"2. Подробный рассказ (3-4 предложения).\n"
+        f"3. Факты через •.\n"
+        f"4. Итог и хештеги.\n\n"
+        f"ВАЖНО: Обязательно закончи последнее предложение точкой. Не обрывай текст!"
     )
     try:
         with DDGS() as ddgs:
-            response = ddgs.chat(prompt, model='gpt-4o-mini')
+            # Убрал модель, чтобы работало быстрее и без обрывов
+            response = ddgs.chat(prompt) 
             text = response.strip()
-            
-            # Убираем только вводные фразы ИИ
             text = re.sub(r'^(Вот|Ваш|Редакторский).*:(\s+)?', '', text, flags=re.IGNORECASE)
-            
             return text
     except:
         return f"🔥 <b>{title}</b>\n\n{content[:400]}..."
 
 def run():
-    url = f"https://newsapi.org/v2/everything?q=(IT OR технологии OR нейросети OR выплаты)&language=ru&sortBy=publishedAt&apiKey={NEWS_API_KEY}"
+    url = f"https://newsapi.org/v2/everything?q=(технологии OR нейросети OR гаджеты OR выплаты)&language=ru&sortBy=publishedAt&apiKey={NEWS_API_KEY}"
     try:
         articles = requests.get(url).json().get('articles', [])
     except: return
@@ -76,7 +72,7 @@ def run():
         if link in posted_data or clean_title in posted_data: continue
         
         raw_text = get_full_article(link)
-        content = raw_text if (raw_text and len(raw_text) > 300) else art.get('description', "")
+        content = raw_text if (raw_text and len(raw_text) > 200) else art.get('description', "")
         if not content: continue
 
         final_post = rewrite_text(title, content)

@@ -26,39 +26,29 @@ def save_posted_data(link, title):
 def get_full_article(url):
     try:
         headers = {'User-Agent': 'Mozilla/5.0'}
-        response = requests.get(url, headers=headers, timeout=15)
+        response = requests.get(url, headers=headers, timeout=10)
         soup = BeautifulSoup(response.text, 'html.parser')
         for s in soup(['script', 'style', 'nav', 'footer', 'header', 'aside']): s.decompose()
-        text = " ".join([p.get_text() for p in soup.find_all('p')])
-        return text[:1000]
+        paragraphs = [p.get_text().strip() for p in soup.find_all('p') if len(p.get_text()) > 60]
+        return " ".join(paragraphs)[:1200]
     except:
         return None
 
 def rewrite_text(title, content):
-    prompt = (
-        f"Напиши новость для ТГ: {title}\n\n"
-        f"СУТЬ: {content}\n\n"
-        f"ОФОРМЛЕНИЕ:\n"
-        f"1. 🔥 Жирный заголовок.\n"
-        f"2. Подробный рассказ (3-4 предложения).\n"
-        f"3. Факты через •.\n"
-        f"4. Итог и хештеги.\n\n"
-        f"ВАЖНО: Обязательно закончи последнее предложение точкой. Не обрывай текст!"
-    )
+    prompt = f"Перескажи новость максимально подробно в 4-5 предложениях. Не используй списки, жирный текст или Markdown. Просто напиши связный текст.\n\nЗаголовок: {title}\nТекст: {content}"
     try:
         with DDGS() as ddgs:
-            # Убрал модель, чтобы работало быстрее и без обрывов
-            response = ddgs.chat(prompt) 
-            text = response.strip()
-            text = re.sub(r'^(Вот|Ваш|Редакторский).*:(\s+)?', '', text, flags=re.IGNORECASE)
-            return text
+            response = ddgs.chat(prompt, model='claude-3-haiku')
+            res = response.strip()
+            return res
     except:
-        return f"🔥 <b>{title}</b>\n\n{content[:400]}..."
+        return content[:400]
 
 def run():
-    url = f"https://newsapi.org/v2/everything?q=(технологии OR нейросети OR гаджеты OR выплаты)&language=ru&sortBy=publishedAt&apiKey={NEWS_API_KEY}"
+    url = f"https://newsapi.org/v2/everything?q=(технологии+OR+нейросети+OR+гаджеты)&language=ru&sortBy=publishedAt&apiKey={NEWS_API_KEY}"
     try:
-        articles = requests.get(url).json().get('articles', [])
+        r = requests.get(url).json()
+        articles = r.get('articles', [])
     except: return
 
     posted_data = get_posted_data()
@@ -71,25 +61,28 @@ def run():
         
         if link in posted_data or clean_title in posted_data: continue
         
-        raw_text = get_full_article(link)
-        content = raw_text if (raw_text and len(raw_text) > 200) else art.get('description', "")
-        if not content: continue
+        content = get_full_article(link) or art.get('description', "")
+        if not content or len(content) < 150: continue
 
-        final_post = rewrite_text(title, content)
-        
-        if not final_post or len(final_post) < 100:
-            continue
+        ai_summary = rewrite_text(title, content)
+        if not ai_summary: continue
 
-        caption = f"{final_post}\n\n🗞 <b>Подпишись на <a href='https://t.me/SUP_V_BotK'>SUP_V_BotK</a></b>"
-        
+        final_post = (
+            f"🔥 <b>{title.upper()}</b>\n\n"
+            f"{ai_summary}\n\n"
+            f"• <a href='{link}'>Читать полностью</a>\n\n"
+            f"🗞 <b>Подпишись на <a href='https://t.me/SUP_V_BotK'>SUP_V_BotK</a></b>"
+        )
+
         try:
             if art.get('urlToImage'):
-                bot.send_photo(CHANNEL_ID, art['urlToImage'], caption=caption, parse_mode='HTML')
+                bot.send_photo(CHANNEL_ID, art['urlToImage'], caption=final_post, parse_mode='HTML')
             else:
-                bot.send_message(CHANNEL_ID, caption, parse_mode='HTML')
+                bot.send_message(CHANNEL_ID, final_post, parse_mode='HTML')
             save_posted_data(link, title)
             break
-        except: continue
+        except:
+            continue
 
 if __name__ == "__main__":
     run()

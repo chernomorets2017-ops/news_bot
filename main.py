@@ -35,16 +35,18 @@ def get_full_article(url):
         return None
 
 def rewrite_text(title, content):
+    session_id = random.randint(1000, 9999)
     instruction = (
-        f"!!! ЭКСКЛЮЗИВ ДЛЯ КАНАЛА !!!\n"
-        f"ИНФОРМАЦИЯ: {title}. {content[:1500]}\n\n"
-        f"ПРИКАЗ: «перескажи новость как настоящий редактор популярного тгк»"
+        f"Session_ID: {session_id}\n"
+        f"Новость: {title}\n"
+        f"Контент: {content[:1500]}\n\n"
+        f"перескажи новость как настоящий редактор популярного тгк"
     )
     try:
         with DDGS() as ddgs:
             response = ddgs.chat(instruction, model='claude-3-haiku')
             text = response.strip()
-            text = re.sub(r'^(Вот|Редактор|Пост|Новость).*?:\s*', '', text, flags=re.IGNORECASE | re.DOTALL)
+            text = re.sub(r'^(Вот|Редактор|Пост|Новость|Session).*?:\s*', '', text, flags=re.IGNORECASE | re.DOTALL)
             return text
     except:
         return f"🔥 <b>{title}</b>\n\n{content[:300]}..."

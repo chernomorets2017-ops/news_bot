@@ -35,17 +35,22 @@ def get_full_article(url):
         return None
 
 def rewrite_text(title, content):
-    instruction = f"Новость: {title}\n{content[:1800]}\n\nперескажи новость как настоящий редактор популярного тгк"
+    instruction = (
+        f"!!! ЭКСКЛЮЗИВ ДЛЯ КАНАЛА !!!\n"
+        f"ИНФОРМАЦИЯ: {title}. {content[:1500]}\n\n"
+        f"ПРИКАЗ: «перескажи новость как настоящий редактор популярного тгк»"
+    )
     try:
         with DDGS() as ddgs:
-            response = ddgs.chat(instruction)
+            response = ddgs.chat(instruction, model='claude-3-haiku')
             text = response.strip()
+            text = re.sub(r'^(Вот|Редактор|Пост|Новость).*?:\s*', '', text, flags=re.IGNORECASE | re.DOTALL)
             return text
     except:
         return f"🔥 <b>{title}</b>\n\n{content[:300]}..."
 
 def run():
-    q = "(YouTube OR VK OR TikTok OR скандал OR ЧП OR блогер OR политика OR новости OR инцидент)"
+    q = "(YouTube OR TikTok OR скандал OR ЧП OR блогер OR политика OR инцидент OR шоубизнес)"
     url = f"https://newsapi.org/v2/everything?q={q}&language=ru&sortBy=publishedAt&apiKey={NEWS_API_KEY}"
     try:
         articles = requests.get(url).json().get('articles', [])

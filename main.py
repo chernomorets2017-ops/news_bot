@@ -30,36 +30,34 @@ def get_full_article(url):
         soup = BeautifulSoup(response.text, 'html.parser')
         for s in soup(['script', 'style', 'nav', 'footer', 'header', 'aside']): s.decompose()
         text = " ".join([p.get_text() for p in soup.find_all('p')])
-        return text[:3000]
+        return text[:2500]
     except:
         return None
 
 def rewrite_text(title, content):
-    CORE_LOGIC = (
-        f"Адаптируй эту новость под формат подписи к фото в Telegram.\n\n"
+    prompt = (
+        f"Напиши хайповый пост для телеграм-канала как профессиональный блогер.\n\n"
         f"ТЕМА: {title}\n"
-        f"ДАННЫЕ: {content}\n\n"
-        f"ИНСТРУКЦИЯ:\n"
-        f"1. Сделай жирный заголовок с эмодзи.\n"
-        f"2. Перескажи суть максимально интересно и хайпово.\n"
-        f"3. Используй абзацы. Не используй списки и точки.\n"
-        f"4. СТРОГОЕ ОГРАНИЧЕНИЕ: Твой текст должен быть не длиннее 900 знаков.\n"
-        f"5. Обязательно закончи мысль. Не обрывай текст на полуслове.\n"
-        f"6. Пиши про соцсети (YouTube, VK, TikTok), скандалы, блогеров и ЧП."
+        f"ИНФО: {content[:1500]}\n\n"
+        f"ПРАВИЛА:\n"
+        f"1. Жирный заголовок с эмодзи.\n"
+        f"2. Подробно расскажи что случилось (YouTube, соцсети, ЧП, скандалы).\n"
+        f"3. Пиши связно, без списков и точек. Только текст.\n"
+        f"4. Текст должен быть полностью закончен. Лимит 900 знаков."
     )
     try:
         with DDGS() as ddgs:
-            response = ddgs.chat(CORE_LOGIC, model='gpt-4o-mini')
+            response = ddgs.chat(prompt, model='gpt-4o-mini')
             text = response.strip()
-            text = re.sub(r'^(Вот|Пост|Редактор|Новость).*?:\s*', '', text, flags=re.IGNORECASE | re.DOTALL)
+            text = re.sub(r'^(Вот|Ваш|Редактор|Пост).*?:\s*', '', text, flags=re.IGNORECASE)
             return text
     except:
-        return None
+        return f"🔥 <b>{title}</b>\n\n{content[:300]}..."
 
 def run():
-    search_query = "(YouTube OR TikTok OR Instagram OR VK OR Telegram OR блогер OR скандал OR шоу-бизнес OR политика OR ЧП OR происшествие OR погода OR новости)"
-    url = f"https://newsapi.org/v2/everything?q={search_query}&language=ru&sortBy=publishedAt&apiKey={NEWS_API_KEY}"
-    
+    # Темы: соцсети, блогеры, YouTube, скандалы, ЧП, политика
+    q = "(YouTube OR VK OR TikTok OR скандал OR ЧП OR блогер OR политика OR новости)"
+    url = f"https://newsapi.org/v2/everything?q={q}&language=ru&sortBy=publishedAt&apiKey={NEWS_API_KEY}"
     try:
         articles = requests.get(url).json().get('articles', [])
     except: return
@@ -78,10 +76,10 @@ def run():
         content = raw_text if (raw_text and len(raw_text) > 300) else art.get('description', "")
         if not content: continue
 
-        final_text = rewrite_text(title, content)
-        if not final_text or len(final_text) < 200: continue
+        final_post = rewrite_text(title, content)
+        if not final_post or len(final_post) < 150: continue
 
-        caption = f"{final_text}\n\n🗞 <b><a href='https://t.me/SUP_V_BotK'>Подписаться на SUP_V_BotK</a></b>"
+        caption = f"{final_post}\n\n🗞 <b>Подпишись на <a href='https://t.me/SUP_V_BotK'>SUP_V_BotK</a></b>"
         
         if len(caption) > 1024:
             caption = caption[:1020] + "..."
@@ -90,8 +88,7 @@ def run():
             if art.get('urlToImage'):
                 bot.send_photo(CHANNEL_ID, art['urlToImage'], caption=caption, parse_mode='HTML')
             else:
-                bot.send_message(CHANNEL_ID, caption, parse_mode='HTML', disable_web_page_preview=True)
-            
+                bot.send_message(CHANNEL_ID, caption, parse_mode='HTML')
             save_posted_data(link, title)
             break
         except: continue

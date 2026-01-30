@@ -30,42 +30,36 @@ def get_full_article(url):
         soup = BeautifulSoup(response.text, 'html.parser')
         for s in soup(['script', 'style', 'nav', 'footer', 'header', 'aside']): s.decompose()
         text = " ".join([p.get_text().strip() for p in soup.find_all('p') if len(p.get_text()) > 40])
-        return text[:1500]
+        return text[:2000]
     except:
         return None
 
 def rewrite_text(title, content):
+    # Промпт теперь более свободный, чтобы ИИ не зажимался
     prompt = (
-        f"Ты — редактор новостей. Напиши пост для ТГ.\n\n"
-        f"ТЕМА: {title}\n"
-        f"ИНФО: {content[:1000]}\n\n"
-        f"ФОРМАТ:\n"
-        f"1. 🔥 **ЖИРНЫЙ ЗАГОЛОВОК**\n\n"
-        f"2. Суть в 2 предложениях. ЗАКОНЧИ МЫСЛЬ ТОЧКОЙ.\n\n"
-        f"3. 2 главных факта через буллит •\n\n"
-        f"4. Итог одной фразой.\n\n"
-        f"ВАЖНО: Пиши кратко (до 400 знаков). Если не влезаешь — просто закончи мысль точкой."
+        f"Напиши новостной пост для Телеграм на основе этих данных.\n\n"
+        f"ЗАГОЛОВОК: {title}\n"
+        f"ИНФО: {content[:1500]}\n\n"
+        f"ПРАВИЛА:\n"
+        f"1. 🔥 Жирный заголовок в начале.\n"
+        f"2. Суть новости (2-3 предложения).\n"
+        f"3. Список важных фактов через •.\n"
+        f"4. Краткий вывод в конце.\n\n"
+        f"ВАЖНО: Пиши подробно, лимит 600 знаков. Постарайся закончить мысль."
     )
     try:
         with DDGS() as ddgs:
+            # Модель o3-mini или gpt-4o-mini выберется автоматически, они стабильны
             response = ddgs.chat(prompt, model='gpt-4o-mini')
             res = response.strip()
-            
-            # Убираем системные фразы нейронки
+            # Убираем только вводные слова ИИ
             res = re.sub(r'^(Вот|Ваш|Пост|Пересказ).*?:', '', res, flags=re.IGNORECASE).strip()
-            
-            # Если текст оборван — режем до последней точки
-            if res and res[-1] not in '.!?»':
-                last_mark = max(res.rfind('.'), res.rfind('!'), res.rfind('?'))
-                if last_mark != -1:
-                    res = res[:last_mark + 1]
             return res
     except:
         return None
 
 def run():
-    # Прямой запрос по ключевым словам
-    url = f"https://newsapi.org/v2/everything?q=технологии+OR+нейросети+OR+гаджеты&language=ru&sortBy=publishedAt&apiKey={NEWS_API_KEY}"
+    url = f"https://newsapi.org/v2/everything?q=технологии+OR+нейросети+OR+выплаты+OR+законы&language=ru&sortBy=publishedAt&apiKey={NEWS_API_KEY}"
     try:
         r = requests.get(url).json()
         articles = r.get('articles', [])
@@ -84,7 +78,8 @@ def run():
 
         final_post = rewrite_text(title, content)
         
-        if not final_post or len(final_post) < 120: continue
+        # Теперь пропускаем почти всё, если текст есть
+        if not final_post or len(final_post) < 100: continue
 
         caption = f"{final_post}\n\n🗞 <b>Подпишись на <a href='https://t.me/SUP_V_BotK'>SUP_V_BotK</a></b>"
         
@@ -95,7 +90,11 @@ def run():
                 bot.send_message(CHANNEL_ID, caption, parse_mode='HTML')
             save_posted_data(link, title)
             break
-        except: continue
+        except:
+            # Если не вышло с фото, шлем текстом
+            bot.send_message(CHANNEL_ID, caption, parse_mode='HTML')
+            save_posted_data(link, title)
+            break
 
 if __name__ == "__main__":
     run()

@@ -37,23 +37,22 @@ def rewrite_text(title, content):
     url = "https://openrouter.ai/api/v1/chat/completions"
     headers = {"Authorization": f"Bearer {OR_TOKEN}", "Content-Type": "application/json"}
     
-    caption_template = (
-        f"Сделай этот текст каптионом для телеграм-канала:\n\n"
-        f"ЗАГОЛОВОК: {title}\n"
-        f"ТЕКСТ: {content[:1500]}\n\n"
-        f"ТРЕБОВАНИЯ К КАПТИОНУ:\n"
-        f"• Огненный заголовок с эмодзи\n"
-        f"• Краткая суть в 2-3 абзаца (свой текст, не копия!)\n"
-        f"• 3 главных факта через буллиты\n"
-        f"• Острый вопрос в конце\n"
-        f"• Хештеги"
+    instruction = (
+        f"Новость: {title}\n"
+        f"Текст: {content[:1500]}\n\n"
+        f"Сделай готовый пост по этой структуре:\n"
+        f"1. Заголовок с тематическим эмодзи\n"
+        f"2. Суть события в 2-3 абзаца (пиши своими словами)\n"
+        f"3. Три главных факта через •\n"
+        f"4. Острый вопрос читателям\n"
+        f"5. 3-4 хештеги"
     )
     
     try:
         response = requests.post(url, headers=headers, json={
             "model": "google/gemini-flash-1.5",
-            "messages": [{"role": "user", "content": caption_template}],
-            "temperature": 0.9
+            "messages": [{"role": "user", "content": instruction}],
+            "temperature": 0.8
         }, timeout=25)
         return response.json()['choices'][0]['message']['content'].strip()
     except:
@@ -76,10 +75,10 @@ def run():
         content = get_full_article(link) or art.get('description', "")
         if len(content) < 300: continue
         
-        final_caption = rewrite_text(title, content)
-        if not final_caption or len(final_caption) < 150: continue
+        final_post = rewrite_text(title, content)
+        if not final_post or len(final_post) < 150: continue
         
-        full_text = f"{final_caption}\n\n🗞 <b>Подпишись на <a href='https://t.me/SUP_V_BotK'>SUP_V_BotK</a></b>"
+        full_text = f"{final_post}\n\n🗞 <b>Подпишись на <a href='https://t.me/SUP_V_BotK'>SUP_V_BotK</a></b>"
         
         try:
             if art.get('urlToImage'):

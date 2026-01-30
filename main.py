@@ -30,22 +30,22 @@ def get_full_article(url):
         soup = BeautifulSoup(response.text, 'html.parser')
         for s in soup(['script', 'style', 'nav', 'footer', 'header', 'aside']): s.decompose()
         text = " ".join([p.get_text() for p in soup.find_all('p')])
-        return text[:3800]
+        return text[:3000]
     except:
         return None
 
 def rewrite_text(title, content):
     CORE_LOGIC = (
-        f"Напиши хайповый пост для Telegram о событиях в соцсетях и мире.\n\n"
+        f"Адаптируй эту новость под формат подписи к фото в Telegram.\n\n"
         f"ТЕМА: {title}\n"
         f"ДАННЫЕ: {content}\n\n"
         f"ИНСТРУКЦИЯ:\n"
-        f"1. Сделай очень жирный и провокационный заголовок с эмодзи.\n"
-        f"2. Подробно разбери ситуацию: что случилось в соцсетях (VK, YouTube, TikTok, Telegram), что говорят блогеры, какие скандалы или инсайды.\n"
-        f"3. Если это ЧП, политика или погода — пиши жестко и по делу.\n"
-        f"4. Пиши длинно (1500-2500 знаков), используй абзацы.\n"
-        f"5. Никаких списков, только живой авторский текст.\n"
-        f"6. Обязательно закончи мысль и добавь хайповые хештеги."
+        f"1. Сделай жирный заголовок с эмодзи.\n"
+        f"2. Перескажи суть максимально интересно и хайпово.\n"
+        f"3. Используй абзацы. Не используй списки и точки.\n"
+        f"4. СТРОГОЕ ОГРАНИЧЕНИЕ: Твой текст должен быть не длиннее 900 знаков.\n"
+        f"5. Обязательно закончи мысль. Не обрывай текст на полуслове.\n"
+        f"6. Пиши про соцсети (YouTube, VK, TikTok), скандалы, блогеров и ЧП."
     )
     try:
         with DDGS() as ddgs:
@@ -79,15 +79,18 @@ def run():
         if not content: continue
 
         final_text = rewrite_text(title, content)
-        if not final_text or len(final_text) < 300: continue
+        if not final_text or len(final_text) < 200: continue
 
-        full_message = f"{final_text}\n\n🗞 <b><a href='https://t.me/SUP_V_BotK'>Подписаться на SUP_V_BotK</a></b>"
+        caption = f"{final_text}\n\n🗞 <b><a href='https://t.me/SUP_V_BotK'>Подписаться на SUP_V_BotK</a></b>"
+        
+        if len(caption) > 1024:
+            caption = caption[:1020] + "..."
 
         try:
             if art.get('urlToImage'):
-                bot.send_photo(CHANNEL_ID, art['urlToImage'])
-            
-            bot.send_message(CHANNEL_ID, full_message, parse_mode='HTML', disable_web_page_preview=True)
+                bot.send_photo(CHANNEL_ID, art['urlToImage'], caption=caption, parse_mode='HTML')
+            else:
+                bot.send_message(CHANNEL_ID, caption, parse_mode='HTML', disable_web_page_preview=True)
             
             save_posted_data(link, title)
             break

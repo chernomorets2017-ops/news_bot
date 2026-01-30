@@ -30,35 +30,33 @@ def get_full_article(url):
         soup = BeautifulSoup(response.text, 'html.parser')
         for s in soup(['script', 'style', 'nav', 'footer', 'header', 'aside']): s.decompose()
         text = " ".join([p.get_text() for p in soup.find_all('p')])
-        return text[:4000]
+        return text[:1500]
     except:
         return None
 
 def rewrite_text(title, content):
-    # Жесткий промпт для DuckDuckGo AI
     prompt = (
-        f"Ты — профессиональный выпускающий редактор IT-новостей. Сделай КРАТКИЙ ПЕРЕСКАЗ для Telegram.\n\n"
-        f"ЗАГОЛОВОК: {title}\n"
+        f"Ты редактор ТГ-канала. Сделай сверхкраткий пересказ.\n\n"
+        f"ТЕМА: {title}\n"
         f"ТЕКСТ: {content}\n\n"
-        f"ТРЕБОВАНИЯ:\n"
-        f"1. 🔥 Сначала напиши сочный жирный заголовок.\n"
-        f"2. ⚡️ Кратко опиши суть (2-3 предложения). Раздели текст на абзацы пустой строкой.\n"
-        f"3. 🚀 Выдели 3 конкретных факта из статьи. Начни каждый с нового смайла (📍, 💎, ✅).\n"
-        f"4. 🛑 Заверши пост итоговым выводом. Мысль должна быть закончена полностью!\n\n"
-        f"ЗАПРЕТ: Никаких ссылок и многоточий. Пиши ярко и профессионально."
+        f"ПРАВИЛА:\n"
+        f"1. 🔥 Жирный заголовок.\n"
+        f"2. Суть новости (1-2 предложения).\n"
+        f"3. 2 факта со смайлами ⚡️.\n"
+        f"4. Итог одной фразой.\n\n"
+        f"ТРЕБОВАНИЯ: Максимум 300 символов. Разделяй блоки пустой строкой. "
+        f"Никаких ссылок. Текст должен быть закончен полностью."
     )
     try:
         with DDGS() as ddgs:
-            # Модель gpt-4o-mini в DuckDuckGo работает стабильно
             response = ddgs.chat(prompt, model='gpt-4o-mini')
             text = response.strip()
-            # Убираем возможный мусор в конце
             last_mark = max(text.rfind('.'), text.rfind('!'), text.rfind('?'))
             if last_mark != -1:
                 text = text[:last_mark + 1]
             return text
     except:
-        return f"🔥 <b>{title}</b>\n\n{content[:500]}."
+        return f"🔥 <b>{title}</b>\n\nКоротко: важное обновление в сфере технологий. Читайте подробности в посте!"
 
 def run():
     url = f"https://newsapi.org/v2/everything?q=(IT OR нейросети OR технологии)&language=ru&sortBy=publishedAt&apiKey={NEWS_API_KEY}"
@@ -77,12 +75,11 @@ def run():
         if link in posted_data or clean_title in posted_data: continue
         
         raw_text = get_full_article(link)
-        content = raw_text if (raw_text and len(raw_text) > 400) else art.get('description', "")
+        content = raw_text if (raw_text and len(raw_text) > 300) else art.get('description', "")
         if not content: continue
 
         final_post = rewrite_text(title, content)
-        
-        if len(final_post) < 200: continue
+        if len(final_post) < 100: continue
 
         caption = f"{final_post}\n\n🗞 <b>Подпишись на <a href='https://t.me/SUP_V_BotK'>SUP_V_BotK</a></b>"
         

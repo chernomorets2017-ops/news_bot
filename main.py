@@ -30,38 +30,40 @@ def get_full_article(url):
         soup = BeautifulSoup(response.text, 'html.parser')
         for s in soup(['script', 'style', 'nav', 'footer', 'header', 'aside']): s.decompose()
         text = " ".join([p.get_text() for p in soup.find_all('p')])
-        return text[:2000]
+        return text[:2500]
     except:
         return None
 
 def rewrite_text(title, content):
     prompt = (
-        f"Ты — новостной редактор. Напиши ОДИН пост по теме: {title}\n"
-        f"ИСХОДНИК: {content[:1500]}\n\n"
-        f"ЗАДАЧА:\n"
-        f"1. Напиши жирный заголовок с 🔥.\n"
-        f"2. В 2-3 предложениях расскажи саму СУТЬ новости (что случилось).\n"
-        f"3. Добавь 2 ключевых факта через ⚡️.\n"
-        f"4. Заверши мысль точкой.\n\n"
-        f"ПРАВИЛА:\n"
-        f"- ПИШИ НОВОСТЬ, а не анонс.\n"
-        f"- Не используй фразы 'в этой статье говорится' или 'узнайте подробнее'.\n"
-        f"- Текст до 400 знаков. Разделяй абзацы пустой строкой."
+        f"Ты — редактор топового новостного ТГ-канала. Сделай краткий и полезный пересказ.\n\n"
+        f"ЗАГОЛОВОК: {title}\n"
+        f"ТЕКСТ: {content[:1500]}\n\n"
+        f"ПРАВИЛА ОФОРМЛЕНИЯ (КАК В ЭТАЛОНЕ):\n"
+        f"1. 💰 (или другой смайл по теме) Жирный заголовок: четкая суть.\n"
+        f"2. Короткое вступление в 1-2 предложения (что случилось/что разъяснили).\n"
+        f"3. Список ключевых фактов или цифр через буллиты (•).\n"
+        f"4. Блок 'Главное для читателя' или совет: что нужно сделать прямо сейчас.\n"
+        f"5. В конце добавь уместные хештеги.\n\n"
+        f"ТРЕБОВАНИЯ: Пиши информативно, без воды. Текст должен быть полностью закончен. Объем до 600 знаков."
     )
     try:
         with DDGS() as ddgs:
             response = ddgs.chat(prompt, model='gpt-4o-mini')
             text = response.strip()
-            text = text.replace("Вот новостной пост:", "").replace("Вот краткий пересказ:", "").strip()
+            
+            # Убираем вводные фразы ИИ
+            text = re.sub(r'^(Вот|Ваш|Редакторский).*:(\s+)?', '', text)
+            
             last_mark = max(text.rfind('.'), text.rfind('!'), text.rfind('?'))
-            if last_mark != -1:
+            if last_mark != -1 and len(text) > last_mark + 5:
                 text = text[:last_mark + 1]
             return text
     except:
         return f"🔥 <b>{title}</b>\n\n{content[:300]}..."
 
 def run():
-    url = f"https://newsapi.org/v2/everything?q=(IT OR нейросети OR технологии)&language=ru&sortBy=publishedAt&apiKey={NEWS_API_KEY}"
+    url = f"https://newsapi.org/v2/everything?q=(IT OR технологии OR нейросети)&language=ru&sortBy=publishedAt&apiKey={NEWS_API_KEY}"
     try:
         articles = requests.get(url).json().get('articles', [])
     except: return
@@ -77,10 +79,13 @@ def run():
         if link in posted_data or clean_title in posted_data: continue
         
         raw_text = get_full_article(link)
-        content = raw_text if (raw_text and len(raw_text) > 200) else art.get('description', "")
+        content = raw_text if (raw_text and len(raw_text) > 300) else art.get('description', "")
         if not content: continue
 
         final_post = rewrite_text(title, content)
+        
+        if len(final_post) < 150:
+            continue
 
         caption = f"{final_post}\n\n🗞 <b>Подпишись на <a href='https://t.me/SUP_V_BotK'>SUP_V_BotK</a></b>"
         

@@ -30,19 +30,18 @@ def get_full_article(url):
         soup = BeautifulSoup(response.text, 'html.parser')
         for s in soup(['script', 'style', 'nav', 'footer', 'header', 'aside']): s.decompose()
         paragraphs = [p.get_text().strip() for p in soup.find_all('p') if len(p.get_text()) > 60]
-        return " ".join(paragraphs)[:1200]
+        return " ".join(paragraphs)[:1500]
     except:
         return None
 
 def rewrite_text(title, content):
-    prompt = f"Перескажи новость максимально подробно в 4-5 предложениях. Не используй списки, жирный текст или Markdown. Просто напиши связный текст.\n\nЗаголовок: {title}\nТекст: {content}"
+    prompt = f"Напиши подробный связный текст про это событие. Минимум 5 предложений. Не используй списки, жирный шрифт и ссылки. Только текст.\n\nТема: {title}\nИнфо: {content}"
     try:
         with DDGS() as ddgs:
-            response = ddgs.chat(prompt, model='claude-3-haiku')
-            res = response.strip()
-            return res
+            response = ddgs.chat(prompt, model='gpt-4o-mini')
+            return response.strip()
     except:
-        return content[:400]
+        return None
 
 def run():
     url = f"https://newsapi.org/v2/everything?q=(технологии+OR+нейросети+OR+гаджеты)&language=ru&sortBy=publishedAt&apiKey={NEWS_API_KEY}"
@@ -65,12 +64,11 @@ def run():
         if not content or len(content) < 150: continue
 
         ai_summary = rewrite_text(title, content)
-        if not ai_summary: continue
+        if not ai_summary or len(ai_summary) < 150: continue
 
         final_post = (
             f"🔥 <b>{title.upper()}</b>\n\n"
             f"{ai_summary}\n\n"
-            f"• <a href='{link}'>Читать полностью</a>\n\n"
             f"🗞 <b>Подпишись на <a href='https://t.me/SUP_V_BotK'>SUP_V_BotK</a></b>"
         )
 

@@ -30,15 +30,15 @@ def get_full_article(url):
         soup = BeautifulSoup(response.text, 'html.parser')
         for s in soup(['script', 'style', 'nav', 'footer', 'header', 'aside']): s.decompose()
         text = " ".join([p.get_text() for p in soup.find_all('p')])
-        return text[:2500]
+        return text[:2000]
     except:
         return None
 
 def rewrite_text(title, content):
-    instruction = f"перескажи новость как настоящий редактор популярного тгк\n\n{title}\n{content[:2000]}"
+    instruction = f"Новость: {title}\n{content[:1800]}\n\nперескажи новость как настоящий редактор популярного тгк"
     try:
         with DDGS() as ddgs:
-            response = ddgs.chat(instruction, model='gpt-4o-mini')
+            response = ddgs.chat(instruction)
             text = response.strip()
             return text
     except:

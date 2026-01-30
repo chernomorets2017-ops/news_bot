@@ -26,45 +26,49 @@ def save_posted_data(link, title):
 def get_full_article(url):
     try:
         headers = {'User-Agent': 'Mozilla/5.0'}
-        response = requests.get(url, headers=headers, timeout=15)
+        response = requests.get(url, headers=headers, timeout=10)
         soup = BeautifulSoup(response.text, 'html.parser')
         for s in soup(['script', 'style', 'nav', 'footer', 'header', 'aside']): s.decompose()
-        text = " ".join([p.get_text() for p in soup.find_all('p')])
-        return text[:2500]
+        text = " ".join([p.get_text().strip() for p in soup.find_all('p') if len(p.get_text()) > 40])
+        return text[:1500]
     except:
         return None
 
 def rewrite_text(title, content):
     prompt = (
-        f"Ты — редактор ТГ-канала. Сделай краткий новостной пост.\n\n"
-        f"ЗАГОЛОВОК: {title}\n"
-        f"ТЕКСТ: {content[:1500]}\n\n"
+        f"Ты — редактор новостей. Напиши пост для ТГ.\n\n"
+        f"ТЕМА: {title}\n"
+        f"ИНФО: {content[:1000]}\n\n"
         f"ФОРМАТ:\n"
-        f"1. 💰 Жирный заголовок.\n"
-        f"2. Суть новости (1-2 предложения). ЗАВЕРШИ МЫСЛЬ ТОЧКОЙ.\n"
-        f"3. Список ключевых фактов через буллиты (•).\n"
-        f"4. Блок 'Главное для читателя': короткий совет.\n"
-        f"5. В конце 3 хештега.\n\n"
-        f"ТРЕБОВАНИЯ: Пиши информативно. Не обрывай текст на полуслове. Лимит 500 знаков."
+        f"1. 🔥 **ЖИРНЫЙ ЗАГОЛОВОК**\n\n"
+        f"2. Суть в 2 предложениях. ЗАКОНЧИ МЫСЛЬ ТОЧКОЙ.\n\n"
+        f"3. 2 главных факта через буллит •\n\n"
+        f"4. Итог одной фразой.\n\n"
+        f"ВАЖНО: Пиши кратко (до 400 знаков). Если не влезаешь — просто закончи мысль точкой."
     )
     try:
         with DDGS() as ddgs:
             response = ddgs.chat(prompt, model='gpt-4o-mini')
             res = response.strip()
-            res = re.sub(r'^(Вот|Ваш|Редакторский).*:(\s+)?', '', res, flags=re.IGNORECASE)
             
+            # Убираем системные фразы нейронки
+            res = re.sub(r'^(Вот|Ваш|Пост|Пересказ).*?:', '', res, flags=re.IGNORECASE).strip()
+            
+            # Если текст оборван — режем до последней точки
             if res and res[-1] not in '.!?»':
                 last_mark = max(res.rfind('.'), res.rfind('!'), res.rfind('?'))
                 if last_mark != -1:
                     res = res[:last_mark + 1]
             return res
     except:
-        return f"🔥 <b>{title}</b>\n\n{content[:300]}..."
+        return None
 
 def run():
-    url = f"https://newsapi.org/v2/everything?q=(IT OR технологии OR нейросети OR выплаты OR законы)&language=ru&sortBy=publishedAt&apiKey={NEWS_API_KEY}"
+    # Прямой запрос по ключевым словам
+    url = f"https://newsapi.org/v2/everything?q=технологии+OR+нейросети+OR+гаджеты&language=ru&sortBy=publishedAt&apiKey={NEWS_API_KEY}"
     try:
-        articles = requests.get(url).json().get('articles', [])
+        r = requests.get(url).json()
+        articles = r.get('articles', [])
     except: return
 
     posted_data = get_posted_data()
@@ -73,16 +77,14 @@ def run():
     for art in articles:
         link = art['url']
         title = art['title']
-        clean_title = re.sub(r'[^\w\s]', '', title).lower().strip()
+        if not title or link in posted_data: continue
         
-        if link in posted_data or clean_title in posted_data: continue
-        
-        raw_text = get_full_article(link)
-        content = raw_text if (raw_text and len(raw_text) > 300) else art.get('description', "")
-        if not content: continue
+        content = get_full_article(link) or art.get('description')
+        if not content or len(content) < 150: continue
 
         final_post = rewrite_text(title, content)
-        if len(final_post) < 150: continue
+        
+        if not final_post or len(final_post) < 120: continue
 
         caption = f"{final_post}\n\n🗞 <b>Подпишись на <a href='https://t.me/SUP_V_BotK'>SUP_V_BotK</a></b>"
         

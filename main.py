@@ -28,42 +28,46 @@ def get_full_article(url):
         headers = {'User-Agent': 'Mozilla/5.0'}
         response = requests.get(url, headers=headers, timeout=15)
         soup = BeautifulSoup(response.text, 'html.parser')
-        for s in soup(['script', 'style', 'nav', 'footer', 'header', 'aside']): s.decompose()
-        text = " ".join([p.get_text() for p in soup.find_all('p')])
+        for s in soup(['script', 'style', 'nav', 'footer', 'header', 'aside', 'form']): s.decompose()
+        
+        paragraphs = [p.get_text().strip() for p in soup.find_all('p') if len(p.get_text()) > 40]
+        text = " ".join(paragraphs)
+        
+        # Вырезаем мусор и тех-инфу
+        text = re.sub(r'(Copyright|©|Адрес для связи|info@|Выделите текст|Ошибка|Поиск по сайту).*', '', text, flags=re.IGNORECASE)
         return text[:2500]
     except:
         return None
 
 def rewrite_text(title, content):
     prompt = (
-        f"Ты — редактор топового новостного ТГ-канала. Сделай краткий и полезный пересказ.\n\n"
-        f"ЗАГОЛОВОК: {title}\n"
-        f"ТЕКСТ: {content[:1500]}\n\n"
-        f"ПРАВИЛА ОФОРМЛЕНИЯ (КАК В ЭТАЛОНЕ):\n"
-        f"1. 💰 (или другой смайл по теме) Жирный заголовок: четкая суть.\n"
-        f"2. Короткое вступление в 1-2 предложения (что случилось/что разъяснили).\n"
-        f"3. Список ключевых фактов или цифр через буллиты (•).\n"
-        f"4. Блок 'Главное для читателя' или совет: что нужно сделать прямо сейчас.\n"
-        f"5. В конце добавь уместные хештеги.\n\n"
-        f"ТРЕБОВАНИЯ: Пиши информативно, без воды. Текст должен быть полностью закончен. Объем до 600 знаков."
+        f"Ты — профессиональный редактор новостей. Сделай пост в стиле 'карточки'.\n\n"
+        f"ТЕМА: {title}\n"
+        f"ИНФО: {content}\n\n"
+        f"СТРУКТУРА ПОСТА:\n"
+        f"1. ⚡️ Жирный заголовок: отрази главную суть.\n\n"
+        f"2. Короткий абзац (2 предложения): разъясни, что произошло.\n\n"
+        f"3. Список ключевых цифр или фактов через буллиты (•).\n\n"
+        f"4. Блок 'Главное для читателя': дай практический совет или вывод.\n\n"
+        f"5. В конце добавь 3 тематических хештега.\n\n"
+        f"ЗАПРЕТ: Не используй фразы 'в тексте говорится', 'коротко: важное обновление'. "
+        f"Пиши только факты. Максимум 500 знаков. Закончи мысль полностью."
     )
     try:
         with DDGS() as ddgs:
             response = ddgs.chat(prompt, model='gpt-4o-mini')
-            text = response.strip()
+            res = response.strip()
+            # Убираем возможный префикс ИИ
+            res = re.sub(r'^.*?новостной пост:|^.*?пересказ:', '', res, flags=re.IGNORECASE).strip()
             
-            # Убираем вводные фразы ИИ
-            text = re.sub(r'^(Вот|Ваш|Редакторский).*:(\s+)?', '', text)
-            
-            last_mark = max(text.rfind('.'), text.rfind('!'), text.rfind('?'))
-            if last_mark != -1 and len(text) > last_mark + 5:
-                text = text[:last_mark + 1]
-            return text
+            last_mark = max(res.rfind('.'), res.rfind('!'), res.rfind('?'))
+            if last_mark != -1: res = res[:last_mark + 1]
+            return res
     except:
-        return f"🔥 <b>{title}</b>\n\n{content[:300]}..."
+        return None
 
 def run():
-    url = f"https://newsapi.org/v2/everything?q=(IT OR технологии OR нейросети)&language=ru&sortBy=publishedAt&apiKey={NEWS_API_KEY}"
+    url = f"https://newsapi.org/v2/everything?q=(IT OR нейросети OR технологии OR выплаты OR законы)&language=ru&sortBy=publishedAt&apiKey={NEWS_API_KEY}"
     try:
         articles = requests.get(url).json().get('articles', [])
     except: return
@@ -80,11 +84,12 @@ def run():
         
         raw_text = get_full_article(link)
         content = raw_text if (raw_text and len(raw_text) > 300) else art.get('description', "")
-        if not content: continue
+        
+        if not content or "Copyright" in content: continue
 
         final_post = rewrite_text(title, content)
         
-        if len(final_post) < 150:
+        if not final_post or len(final_post) < 150 or "обновление в сфере" in final_post:
             continue
 
         caption = f"{final_post}\n\n🗞 <b>Подпишись на <a href='https://t.me/SUP_V_BotK'>SUP_V_BotK</a></b>"

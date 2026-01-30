@@ -25,42 +25,48 @@ def save_posted_data(link, title):
 
 def get_full_article(url):
     try:
-        headers = {'User-Agent': 'Mozilla/5.0'}
+        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
         response = requests.get(url, headers=headers, timeout=15)
         soup = BeautifulSoup(response.text, 'html.parser')
-        for s in soup(['script', 'style', 'nav', 'footer', 'header', 'aside']): s.decompose()
-        text = " ".join([p.get_text() for p in soup.find_all('p')])
-        return text[:2500]
+        for s in soup(['script', 'style', 'nav', 'footer', 'header', 'aside', 'form']): s.decompose()
+        paragraphs = soup.find_all('p')
+        text = " ".join([p.get_text() for p in paragraphs if len(p.get_text()) > 50])
+        return text[:3500] if text else None
     except:
         return None
 
 def rewrite_text(title, content):
     prompt = (
-        f"Напиши полноценный новостной пост."
-        f"ЗАГОЛОВОК: {title}"
-        f"ТЕКСТ: {content[:1500]}"
-        f"ПРАВИЛА:"
-        f"1. Сделай жирный заголовок."
-        f"2. Подробно расскажи суть события."
-        f"3. Ключевые факты выдели через •."
-        f"4. Блок 'Итог для читателя'."
-        f"5. В конце добавь хештеги."
-        f"ЗАПРЕТ: Не используй ссылки на другие сайты. Пиши связно и до конца."
+        f"ИНСТРУКЦИЯ: Напиши полноценный, законченный новостной пост для Telegram. "
+        f"Используй HTML-разметку (<b> и <i>).\n\n"
+        f"СТРУКТУРА:\n"
+        f"1. Жирный заголовок.\n"
+        f"2. Суть события (2-3 подробных абзаца).\n"
+        f"3. Список фактов через •.\n"
+        f"4. Блок 'Итог'.\n"
+        f"5. Хештеги.\n\n"
+        f"ЗАПРЕТ: Не используй вводные фразы. Текст должен быть завершенным.\n\n"
+        f"ЗАГОЛОВОК: {title}\n"
+        f"ДАННЫЕ: {content[:2500]}"
     )
     try:
         with DDGS() as ddgs:
-            response = ddgs.chat(prompt, model='gpt-4o-mini')
+            response = ddgs.chat(prompt, model='claude-3-haiku')
+            if not response: return None
             text = response.strip()
-            text = re.sub(r'^(Вот|Ваш|Редакторский).*:(\s+)?', '', text, flags=re.IGNORECASE)
+            text = re.sub(r'^(Вот|Ваш|Держите|Готовый|Конечно|Редактор).*:(\s+)?', '', text, flags=re.IGNORECASE | re.MULTILINE)
             return text
     except:
-        return f"🔥 <b>{title}</b>\n\n{content[:400]}..."
+        return None
 
 def run():
-    url = f"https://newsapi.org/v2/everything?q=(IT OR технологии OR нейросети)&language=ru&sortBy=publishedAt&apiKey={NEWS_API_KEY}"
+    url = f"https://newsapi.org/v2/everything?q=(IT OR технологии OR нейросети OR гаджеты)&language=ru&sortBy=publishedAt&apiKey={NEWS_API_KEY}"
     try:
-        articles = requests.get(url).json().get('articles', [])
+        res = requests.get(url)
+        articles = res.json().get('articles', [])
     except: return
+
+    if not articles: return
 
     posted_data = get_posted_data()
     random.shuffle(articles)
@@ -73,12 +79,13 @@ def run():
         if link in posted_data or clean_title in posted_data: continue
         
         raw_text = get_full_article(link)
-        content = raw_text if (raw_text and len(raw_text) > 300) else art.get('description', "")
-        if not content: continue
+        content = raw_text if (raw_text and len(raw_text) > 400) else art.get('description', "")
+        
+        if not content or len(content) < 200: continue
 
         final_post = rewrite_text(title, content)
         
-        if len(final_post) < 150:
+        if not final_post or len(final_post) < 400:
             continue
 
         caption = f"{final_post}\n\n🗞 <b>Подпишись на <a href='https://t.me/SUP_V_BotK'>SUP_V_BotK</a></b>"
@@ -89,8 +96,9 @@ def run():
             else:
                 bot.send_message(CHANNEL_ID, caption, parse_mode='HTML')
             save_posted_data(link, title)
-            break
-        except: continue
+            break 
+        except:
+            continue
 
 if __name__ == "__main__":
     run()

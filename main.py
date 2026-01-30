@@ -29,7 +29,7 @@ def get_full_article(url):
         response = requests.get(url, headers=headers, timeout=10)
         soup = BeautifulSoup(response.text, 'html.parser')
         for s in soup(['script', 'style', 'nav', 'footer', 'header', 'aside']): s.decompose()
-        return " ".join([p.get_text() for p in soup.find_all('p')])[:2500]
+        return " ".join([p.get_text() for p in soup.find_all('p')])[:2000]
     except:
         return None
 
@@ -40,12 +40,12 @@ def rewrite_text(title, content):
     instruction = (
         f"Новость: {title}\n"
         f"Текст: {content[:1500]}\n\n"
-        f"Сделай готовый пост по этой структуре:\n"
-        f"1. Заголовок с тематическим эмодзи\n"
-        f"2. Суть события в 2-3 абзаца (пиши своими словами)\n"
+        f"Сделай готовый пост:\n"
+        f"1. Заголовок с эмодзи\n"
+        f"2. Суть в 2 абзаца своими словами\n"
         f"3. Три главных факта через •\n"
-        f"4. Острый вопрос читателям\n"
-        f"5. 3-4 хештеги"
+        f"4. Вопрос читателям\n"
+        f"5. 3 хештега"
     )
     
     try:
@@ -59,9 +59,10 @@ def rewrite_text(title, content):
         return None
 
 def run():
-    api_url = f"https://newsapi.org/v2/everything?q=(YouTube OR TikTok OR скандал OR блогер OR ЧП)&language=ru&sortBy=publishedAt&apiKey={NEWS_API_KEY}"
+    api_url = f"https://newsapi.org/v2/everything?q=(блогер OR скандал OR ЧП OR новости OR инцидент)&language=ru&sortBy=publishedAt&apiKey={NEWS_API_KEY}"
     try:
-        articles = requests.get(api_url).json().get('articles', [])
+        r = requests.get(api_url)
+        articles = r.json().get('articles', [])
     except: return
     
     posted_data = get_posted_data()
@@ -73,10 +74,10 @@ def run():
         if link in posted_data or clean_title in posted_data: continue
         
         content = get_full_article(link) or art.get('description', "")
-        if len(content) < 300: continue
+        if not content or len(content) < 150: continue
         
         final_post = rewrite_text(title, content)
-        if not final_post or len(final_post) < 150: continue
+        if not final_post: continue
         
         full_text = f"{final_post}\n\n🗞 <b>Подпишись на <a href='https://t.me/SUP_V_BotK'>SUP_V_BotK</a></b>"
         
@@ -84,7 +85,7 @@ def run():
             if art.get('urlToImage'):
                 bot.send_photo(CHANNEL_ID, art['urlToImage'], caption=full_text[:1024], parse_mode='HTML')
             else:
-                bot.send_message(CHANNEL_ID, full_text, parse_mode='HTML', disable_web_page_preview=False)
+                bot.send_message(CHANNEL_ID, full_text, parse_mode='HTML')
             save_posted_data(link, title)
             break
         except: continue

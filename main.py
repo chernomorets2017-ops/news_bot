@@ -26,28 +26,40 @@ def save_posted_data(link, title):
 def get_full_article(url):
     try:
         headers = {'User-Agent': 'Mozilla/5.0'}
-        response = requests.get(url, headers=headers, timeout=10)
+        response = requests.get(url, headers=headers, timeout=15)
         soup = BeautifulSoup(response.text, 'html.parser')
         for s in soup(['script', 'style', 'nav', 'footer', 'header', 'aside']): s.decompose()
-        paragraphs = [p.get_text().strip() for p in soup.find_all('p') if len(p.get_text()) > 60]
-        return " ".join(paragraphs)[:1500]
+        text = " ".join([p.get_text() for p in soup.find_all('p')])
+        return text[:2500]
     except:
         return None
 
 def rewrite_text(title, content):
-    prompt = f"Напиши подробный связный текст про это событие. Минимум 5 предложений. Не используй списки, жирный шрифт и ссылки. Только текст.\n\nТема: {title}\nИнфо: {content}"
+    prompt = (
+        f"Напиши полноценный новостной пост.\n\n"
+        f"ЗАГОЛОВОК: {title}\n"
+        f"ТЕКСТ: {content[:1500]}\n\n"
+        f"ПРАВИЛА:\n"
+        f"1. Сделай жирный заголовок.\n"
+        f"2. Подробно расскажи суть события.\n"
+        f"3. Ключевые факты выдели через •.\n"
+        f"4. Блок 'Итог для читателя'.\n"
+        f"5. В конце добавь хештеги.\n\n"
+        f"ЗАПРЕТ: Не используй ссылки на другие сайты. Пиши связно и до конца."
+    )
     try:
         with DDGS() as ddgs:
             response = ddgs.chat(prompt, model='gpt-4o-mini')
-            return response.strip()
+            text = response.strip()
+            text = re.sub(r'^(Вот|Ваш|Редакторский).*:(\s+)?', '', text, flags=re.IGNORECASE)
+            return text
     except:
-        return None
+        return f"🔥 <b>{title}</b>\n\n{content[:400]}..."
 
 def run():
-    url = f"https://newsapi.org/v2/everything?q=(технологии+OR+нейросети+OR+гаджеты)&language=ru&sortBy=publishedAt&apiKey={NEWS_API_KEY}"
+    url = f"https://newsapi.org/v2/everything?q=(IT OR технологии OR нейросети)&language=ru&sortBy=publishedAt&apiKey={NEWS_API_KEY}"
     try:
-        r = requests.get(url).json()
-        articles = r.get('articles', [])
+        articles = requests.get(url).json().get('articles', [])
     except: return
 
     posted_data = get_posted_data()
@@ -60,27 +72,25 @@ def run():
         
         if link in posted_data or clean_title in posted_data: continue
         
-        content = get_full_article(link) or art.get('description', "")
-        if not content or len(content) < 150: continue
+        raw_text = get_full_article(link)
+        content = raw_text if (raw_text and len(raw_text) > 300) else art.get('description', "")
+        if not content: continue
 
-        ai_summary = rewrite_text(title, content)
-        if not ai_summary or len(ai_summary) < 150: continue
+        final_post = rewrite_text(title, content)
+        
+        if len(final_post) < 150:
+            continue
 
-        final_post = (
-            f"🔥 <b>{title.upper()}</b>\n\n"
-            f"{ai_summary}\n\n"
-            f"🗞 <b>Подпишись на <a href='https://t.me/SUP_V_BotK'>SUP_V_BotK</a></b>"
-        )
-
+        caption = f"{final_post}\n\n🗞 <b>Подпишись на <a href='https://t.me/SUP_V_BotK'>SUP_V_BotK</a></b>"
+        
         try:
             if art.get('urlToImage'):
-                bot.send_photo(CHANNEL_ID, art['urlToImage'], caption=final_post, parse_mode='HTML')
+                bot.send_photo(CHANNEL_ID, art['urlToImage'], caption=caption, parse_mode='HTML')
             else:
-                bot.send_message(CHANNEL_ID, final_post, parse_mode='HTML')
+                bot.send_message(CHANNEL_ID, caption, parse_mode='HTML')
             save_posted_data(link, title)
             break
-        except:
-            continue
+        except: continue
 
 if __name__ == "__main__":
     run()

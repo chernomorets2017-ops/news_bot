@@ -35,71 +35,46 @@ def get_full_article(url):
         return None
 
 def rewrite_text(title, content):
-    API_URL = "https://api-inference.huggingface.co/models/meta-llama/Meta-Llama-3-8B-Instruct"
+    API_URL = "https://api-inference.huggingface.co/models/Qwen/Qwen2.5-72B-Instruct"
     headers = {"Authorization": f"Bearer {HF_TOKEN}"}
-    
     prompt = (
-        f"<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n"
-        f"Ты — редактор популярного телеграм-канала. Твоя задача: пересказать новость хайпово, кратко и с эмодзи. <|eot_id|>\n"
-        f"<|start_header_id|>user<|end_header_id|>\n"
-        f"Вот новость: {title}. {content[:1200]}\n\n"
-        f"ТВОЯ ЗАДАЧА: перескажи новость как настоящий редактор популярного тгк <|eot_id|>\n"
-        f"<|start_header_id|>assistant<|end_header_id|>\n"
+        f"<|im_start|>system\nперескажи новость как настоящий редактор популярного тгк<|im_end|>\n"
+        f"<|im_start|>user\n{title}\n\n{content[:1200]}<|im_end|>\n"
+        f"<|im_start|>assistant\n"
     )
-    
     try:
         response = requests.post(API_URL, headers=headers, json={
             "inputs": prompt,
-            "parameters": {
-                "max_new_tokens": 450,
-                "temperature": 0.6,
-                "top_p": 0.9,
-                "return_full_text": False
-            }
-        }, timeout=20)
-        
+            "parameters": {"max_new_tokens": 500, "temperature": 0.7, "return_full_text": False}
+        }, timeout=25)
         result = response.json()
         if isinstance(result, list):
-            text = result[0]['generated_text'].strip()
-        else:
-            text = result['generated_text'].strip()
-            
-        text = re.sub(r'<\|.*?\|>', '', text)
-        return text
+            return result[0]['generated_text'].strip()
+        return result['generated_text'].strip()
     except:
         return None
 
 def run():
     q = "(YouTube OR TikTok OR скандал OR ЧП OR блогер OR инцидент OR новости OR криминал OR политика)"
     url = f"https://newsapi.org/v2/everything?q={q}&language=ru&sortBy=publishedAt&apiKey={NEWS_API_KEY}"
-    
     try:
         articles = requests.get(url).json().get('articles', [])
     except: return
-    
     posted_data = get_posted_data()
     random.shuffle(articles)
-    
     for art in articles:
         link = art['url']
         title = art['title']
         clean_title = re.sub(r'[^\w\s]', '', title).lower().strip()
-        
         if link in posted_data or clean_title in posted_data: continue
-        
         raw_text = get_full_article(link)
         content = raw_text if (raw_text and len(raw_text) > 200) else art.get('description', "")
         if not content: continue
-        
         final_post = rewrite_text(title, content)
-        
         if not final_post or len(final_post) < 100: continue
-        
         caption = f"{final_post}\n\n🗞 <b>Подпишись на <a href='https://t.me/SUP_V_BotK'>SUP_V_BotK</a></b>"
-        
         if len(caption) > 1024:
             caption = caption[:1020] + "..."
-            
         try:
             if art.get('urlToImage'):
                 bot.send_photo(CHANNEL_ID, art['urlToImage'], caption=caption, parse_mode='HTML')
@@ -107,8 +82,7 @@ def run():
                 bot.send_message(CHANNEL_ID, caption, parse_mode='HTML')
             save_posted_data(link, title)
             break
-        except:
-            continue
+        except: continue
 
 if __name__ == "__main__":
     run()

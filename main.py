@@ -4,10 +4,10 @@ import requests
 import re
 import random
 from bs4 import BeautifulSoup
-from duckduckgo_search import DDGS
 
 BOT_TOKEN = "8546746980:AAF3z5K85WaBMC-SKTSTN5Tx_dXxXyZXIoQ"
-NEWS_API_KEY = "E16b35592a2147989d80d46457d4f916" 
+NEWS_API_KEY = "E16b35592a2147989d80d46457d4f916"
+HF_TOKEN = "Hf_WbClEYUXXnScbaydWjQlTtwbROQJQtVrMi"
 CHANNEL_ID = "@SUP_V_BotK"
 DB_FILE = "last_links.txt"
 
@@ -35,51 +35,40 @@ def get_full_article(url):
         return None
 
 def rewrite_text(title, content):
-    session_id = random.randint(1000, 9999)
-    instruction = (
-        f"Session_ID: {session_id}\n"
-        f"Новость: {title}\n"
-        f"Контент: {content[:1500]}\n\n"
-        f"перескажи новость как настоящий редактор популярного тгк"
-    )
+    API_URL = "https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Instruct-v0.3"
+    headers = {"Authorization": f"Bearer {HF_TOKEN}"}
+    prompt = f"<s>[INST] перескажи новость как настоящий редактор популярного тгк:\n{title}\n{content[:1500]} [/INST]"
     try:
-        with DDGS() as ddgs:
-            response = ddgs.chat(instruction, model='claude-3-haiku')
-            text = response.strip()
-            text = re.sub(r'^(Вот|Редактор|Пост|Новость|Session).*?:\s*', '', text, flags=re.IGNORECASE | re.DOTALL)
-            return text
+        response = requests.post(API_URL, headers=headers, json={
+            "inputs": prompt,
+            "parameters": {"max_new_tokens": 500, "temperature": 0.7}
+        })
+        result = response.json()
+        return result[0]['generated_text'].split("[/INST]")[-1].strip()
     except:
         return f"🔥 <b>{title}</b>\n\n{content[:300]}..."
 
 def run():
-    q = "(YouTube OR TikTok OR скандал OR ЧП OR блогер OR политика OR инцидент OR шоубизнес)"
+    q = "(YouTube OR TikTok OR скандал OR ЧП OR блогер OR инцидент OR шоубизнес)"
     url = f"https://newsapi.org/v2/everything?q={q}&language=ru&sortBy=publishedAt&apiKey={NEWS_API_KEY}"
     try:
         articles = requests.get(url).json().get('articles', [])
     except: return
-
     posted_data = get_posted_data()
     random.shuffle(articles)
-
     for art in articles:
         link = art['url']
         title = art['title']
         clean_title = re.sub(r'[^\w\s]', '', title).lower().strip()
-        
         if link in posted_data or clean_title in posted_data: continue
-        
         raw_text = get_full_article(link)
         content = raw_text if (raw_text and len(raw_text) > 300) else art.get('description', "")
         if not content: continue
-
         final_post = rewrite_text(title, content)
         if not final_post or len(final_post) < 100: continue
-
         caption = f"{final_post}\n\n🗞 <b>Подпишись на <a href='https://t.me/SUP_V_BotK'>SUP_V_BotK</a></b>"
-        
         if len(caption) > 1024:
             caption = caption[:1020] + "..."
-
         try:
             if art.get('urlToImage'):
                 bot.send_photo(CHANNEL_ID, art['urlToImage'], caption=caption, parse_mode='HTML')

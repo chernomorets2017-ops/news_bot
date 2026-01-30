@@ -30,38 +30,34 @@ def get_full_article(url):
         soup = BeautifulSoup(response.text, 'html.parser')
         for s in soup(['script', 'style', 'nav', 'footer', 'header', 'aside']): s.decompose()
         text = " ".join([p.get_text() for p in soup.find_all('p')])
-        # Режем вход ОЧЕНЬ СИЛЬНО, чтобы ИИ не тупил
-        return text[:800]
+        return text[:2000]
     except:
         return None
 
 def rewrite_text(title, content):
-    # Упрощаем промпт до уровня табуретки
-    INSTRUCTION = (
-        f"Напиши один большой связный абзац про эту новость: {title}\n\n"
-        f"ИНФОРМАЦИЯ: {content}\n\n"
-        f"ТРЕБОВАНИЯ:\n"
-        f"1. Начни с жирного заголовка.\n"
-        f"2. Пиши только текстом, без списков и точек.\n"
-        f"3. В конце обязательно напиши 'Конец связи.'\n"
-        f"4. Не обрывай на полуслове, закончи мысль."
+    CORE_LOGIC = (
+        f"Напиши полноценный аналитический пост для Telegram.\n\n"
+        f"ЗАГОЛОВОК: {title}\n"
+        f"ДАННЫЕ: {content}\n\n"
+        f"ИНСТРУКЦИЯ:\n"
+        f"1. Начни с мощного жирного заголовка с эмодзи.\n"
+        f"2. Разверни мысль: объясни подробно, что произошло и почему это важно.\n"
+        f"3. Используй абзацы для легкости чтения.\n"
+        f"4. Не используй списки (никаких точек и буллитов), пиши связным текстом.\n"
+        f"5. Твоя цель — занять примерно 800-900 символов.\n"
+        f"6. В самом конце поставь три точки, если мысль закончена. Это знак финиша."
     )
     try:
         with DDGS() as ddgs:
-            response = ddgs.chat(INSTRUCTION, model='gpt-4o-mini')
+            response = ddgs.chat(CORE_LOGIC, model='gpt-4o-mini')
             text = response.strip()
-            
-            # Убираем системный мусор
             text = re.sub(r'^(Вот|Пересказ|Редактор|Пост).*?:\s*', '', text, flags=re.IGNORECASE)
-            
-            # Если она написала 'Конец связи', значит она точно дошла до конца
-            text = text.replace('Конец связи.', '').strip()
             return text
     except:
-        return f"🔥 <b>{title}</b>\n\n{content[:400]}..."
+        return f"🔥 <b>{title}</b>\n\n{content[:500]}..."
 
 def run():
-    url = f"https://newsapi.org/v2/everything?q=(IT OR технологии OR нейросети)&language=ru&sortBy=publishedAt&apiKey={NEWS_API_KEY}"
+    url = f"https://newsapi.org/v2/everything?q=(технологии OR нейросети OR гаджеты)&language=ru&sortBy=publishedAt&apiKey={NEWS_API_KEY}"
     try:
         articles = requests.get(url).json().get('articles', [])
     except: return
@@ -77,16 +73,17 @@ def run():
         if link in posted_data or clean_title in posted_data: continue
         
         raw_text = get_full_article(link)
-        content = raw_text if (raw_text and len(raw_text) > 200) else art.get('description', "")
+        content = raw_text if (raw_text and len(raw_text) > 300) else art.get('description', "")
         if not content: continue
 
         final_post = rewrite_text(title, content)
-        
-        if not final_post or len(final_post) < 100:
-            continue
+        if not final_post or len(final_post) < 150: continue
 
-        caption = f"{final_post}\n\n🗞 <b>Подпишись на <a href='https://t.me/SUP_V_BotK'>SUP_V_BotK</a></b>"
+        caption = f"{final_post}\n\n🗞 <b><a href='https://t.me/SUP_V_BotK'>Подписаться на SUP_V_BotK</a></b>"
         
+        if len(caption) > 1024:
+            caption = caption[:1021] + "..."
+
         try:
             if art.get('urlToImage'):
                 bot.send_photo(CHANNEL_ID, art['urlToImage'], caption=caption, parse_mode='HTML')

@@ -35,28 +35,17 @@ def get_full_article(url):
         return None
 
 def rewrite_text(title, content):
-    prompt = (
-        f"Напиши хайповый пост для телеграм-канала как профессиональный блогер.\n\n"
-        f"ТЕМА: {title}\n"
-        f"ИНФО: {content[:1500]}\n\n"
-        f"ПРАВИЛА:\n"
-        f"1. Жирный заголовок с эмодзи.\n"
-        f"2. Подробно расскажи что случилось (YouTube, соцсети, ЧП, скандалы).\n"
-        f"3. Пиши связно, без списков и точек. Только текст.\n"
-        f"4. Текст должен быть полностью закончен. Лимит 900 знаков."
-    )
+    instruction = f"перескажи новость как настоящий редактор популярного тгк\n\n{title}\n{content[:2000]}"
     try:
         with DDGS() as ddgs:
-            response = ddgs.chat(prompt, model='gpt-4o-mini')
+            response = ddgs.chat(instruction, model='gpt-4o-mini')
             text = response.strip()
-            text = re.sub(r'^(Вот|Ваш|Редактор|Пост).*?:\s*', '', text, flags=re.IGNORECASE)
             return text
     except:
         return f"🔥 <b>{title}</b>\n\n{content[:300]}..."
 
 def run():
-    # Темы: соцсети, блогеры, YouTube, скандалы, ЧП, политика
-    q = "(YouTube OR VK OR TikTok OR скандал OR ЧП OR блогер OR политика OR новости)"
+    q = "(YouTube OR VK OR TikTok OR скандал OR ЧП OR блогер OR политика OR новости OR инцидент)"
     url = f"https://newsapi.org/v2/everything?q={q}&language=ru&sortBy=publishedAt&apiKey={NEWS_API_KEY}"
     try:
         articles = requests.get(url).json().get('articles', [])
@@ -77,7 +66,7 @@ def run():
         if not content: continue
 
         final_post = rewrite_text(title, content)
-        if not final_post or len(final_post) < 150: continue
+        if not final_post or len(final_post) < 100: continue
 
         caption = f"{final_post}\n\n🗞 <b>Подпишись на <a href='https://t.me/SUP_V_BotK'>SUP_V_BotK</a></b>"
         

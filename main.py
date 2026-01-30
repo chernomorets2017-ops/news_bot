@@ -3,7 +3,6 @@ import telebot
 import requests
 import re
 import random
-import time
 from bs4 import BeautifulSoup
 from duckduckgo_search import DDGS
 
@@ -30,42 +29,50 @@ def get_full_article(url):
         response = requests.get(url, headers=headers, timeout=10)
         soup = BeautifulSoup(response.text, 'html.parser')
         for s in soup(['script', 'style', 'nav', 'footer', 'header', 'aside']): s.decompose()
-        text = " ".join([p.get_text().strip() for p in soup.find_all('p') if len(p.get_text()) > 30])
+        text = " ".join([p.get_text().strip() for p in soup.find_all('p') if len(p.get_text()) > 40])
         return text[:2000]
     except:
         return None
 
 def rewrite_text(title, content):
-    # Ультра-простой промпт, с которым справится любая нейронка
     prompt = (
-        f"Перескажи новость для Телеграм. Пиши строго по делу.\n\n"
-        f"ТЕМА: {title}\n"
-        f"ИНФО: {content[:1200]}\n\n"
+        f"Ты — редактор ТГ-канала. Сделай пост из этого текста.\n\n"
+        f"НОВОСТЬ: {title}\n"
+        f"ТЕКСТ: {content[:1500]}\n\n"
         f"ФОРМАТ:\n"
-        f"1. 🔥 ЖИРНЫЙ ЗАГОЛОВОК\n"
-        f"2. Суть новости (2 предложения)\n"
-        f"3. Три факта через значок •\n"
-        f"4. Итог одной фразой.\n\n"
-        f"ОГРАНИЧЕНИЕ: Пиши кратко. Никаких вступлений."
+        f"1. ⚡️ ЖИРНЫЙ ЗАГОЛОВОК (суть одним предложением)\n\n"
+        f"2. Коротко: что произошло (1-2 предложения).\n\n"
+        f"3. Главные факты и цифры:\n"
+        f"• факт 1\n"
+        f"• факт 2\n\n"
+        f"4. Итог: краткий вывод или что делать.\n\n"
+        f"ЗАПРЕТ: Никакой воды, ссылок и вступлений. Текст до 400 знаков."
     )
     try:
-        time.sleep(2) # Пауза чтобы не блокировали
         with DDGS() as ddgs:
             response = ddgs.chat(prompt, model='gpt-4o-mini')
             res = response.strip()
-            # Убираем системный мусор ИИ вручную
-            res = re.sub(r'^.*?новость:|^.*?пересказ:|^.*?пост:', '', res, flags=re.IGNORECASE).strip()
-            # Если точки нет — добавим
+            res = re.sub(r'^(Вот|Ваш|Пересказ|Пост).*?:', '', res, flags=re.IGNORECASE).strip()
             if res and res[-1] not in '.!?': res += '.'
             return res
     except:
         return None
 
 def run():
-    url = f"https://newsapi.org/v2/everything?q=(технологии OR нейросети OR выплаты OR законы)&language=ru&sortBy=publishedAt&apiKey={NEWS_API_KEY}"
-    try:
-        articles = requests.get(url).json().get('articles', [])
-    except: return
+    endpoints = [
+        f"https://newsapi.org/v2/top-headlines?country=ru&apiKey={NEWS_API_KEY}",
+        f"https://newsapi.org/v2/everything?q=(технологии OR нейросети OR выплаты OR законы)&language=ru&sortBy=publishedAt&apiKey={NEWS_API_KEY}"
+    ]
+    
+    articles = []
+    for url in endpoints:
+        try:
+            r = requests.get(url).json()
+            if r.get('articles'):
+                articles.extend(r['articles'])
+        except: continue
+        
+    if not articles: return
 
     posted_data = get_posted_data()
     random.shuffle(articles)
@@ -73,30 +80,27 @@ def run():
     for art in articles:
         link = art['url']
         title = art['title']
-        clean_title = re.sub(r'[^\w\s]', '', title).lower().strip()
+        if not title or link in posted_data: continue
         
-        if link in posted_data or clean_title in posted_data: continue
-        
-        content = get_full_article(link) or art.get('description', "")
-        if len(content) < 150: continue
+        content = get_full_article(link) or art.get('description') or art.get('content')
+        if not content or len(content) < 100: continue
 
         final_post = rewrite_text(title, content)
-        
-        # Смягчили проверку: теперь постим почти всё, что длиннее 100 знаков
-        if not final_post or len(final_post) < 100:
-            continue
+        if not final_post or len(final_post) < 120: continue
 
         caption = f"{final_post}\n\n🗞 <b>Подпишись на <a href='https://t.me/SUP_V_BotK'>SUP_V_BotK</a></b>"
         
         try:
-            if art.get('urlToImage'):
+            if art.get('urlToImage') and requests.head(art['urlToImage']).status_code == 200:
                 bot.send_photo(CHANNEL_ID, art['urlToImage'], caption=caption, parse_mode='HTML')
             else:
                 bot.send_message(CHANNEL_ID, caption, parse_mode='HTML')
             save_posted_data(link, title)
             break
-        except Exception as e:
-            continue
+        except:
+            bot.send_message(CHANNEL_ID, caption, parse_mode='HTML')
+            save_posted_data(link, title)
+            break
 
 if __name__ == "__main__":
     run()

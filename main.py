@@ -33,27 +33,26 @@ def get_full_article(url):
     except:
         return None
 
-def rewrite_to_caption(title, content):
+def rewrite_text(title, content):
     url = "https://openrouter.ai/api/v1/chat/completions"
     headers = {"Authorization": f"Bearer {OR_TOKEN}", "Content-Type": "application/json"}
     
-    prompt = (
-        f"Ты редактор ТГ-канала. Напиши сочный CAPTION для фото по этой новости.\n\n"
-        f"НОВОСТЬ: {title}\n"
-        f"КОНТЕНТ: {content[:1500]}\n\n"
-        f"СТРУКТУРА ПОДПИСИ:\n"
-        f"1. 🔥 ХАЙПОВЫЙ ЗАГОЛОВОК (капсом).\n"
-        f"2. СУТЬ: 2-3 коротких и дерзких предложения.\n"
-        f"3. ПОДРОБНОСТИ: 3 важных факта через буллиты •.\n"
-        f"4. ПРИЗЫВ: Острый вопрос или совет читателю.\n"
-        f"5. ХЕШТЕГИ.\n\n"
-        f"ВАЖНО: Пиши без лишних слов, только готовый текст для подписи. Максимум 900 знаков."
+    caption_template = (
+        f"Сделай этот текст каптионом для телеграм-канала:\n\n"
+        f"ЗАГОЛОВОК: {title}\n"
+        f"ТЕКСТ: {content[:1500]}\n\n"
+        f"ТРЕБОВАНИЯ К КАПТИОНУ:\n"
+        f"• Огненный заголовок с эмодзи\n"
+        f"• Краткая суть в 2-3 абзаца (свой текст, не копия!)\n"
+        f"• 3 главных факта через буллиты\n"
+        f"• Острый вопрос в конце\n"
+        f"• Хештеги"
     )
     
     try:
         response = requests.post(url, headers=headers, json={
             "model": "google/gemini-flash-1.5",
-            "messages": [{"role": "user", "content": prompt}],
+            "messages": [{"role": "user", "content": caption_template}],
             "temperature": 0.9
         }, timeout=25)
         return response.json()['choices'][0]['message']['content'].strip()
@@ -61,7 +60,7 @@ def rewrite_to_caption(title, content):
         return None
 
 def run():
-    api_url = f"https://newsapi.org/v2/everything?q=(YouTube OR TikTok OR скандал OR ЧП OR блогер OR новости)&language=ru&sortBy=publishedAt&apiKey={NEWS_API_KEY}"
+    api_url = f"https://newsapi.org/v2/everything?q=(YouTube OR TikTok OR скандал OR блогер OR ЧП)&language=ru&sortBy=publishedAt&apiKey={NEWS_API_KEY}"
     try:
         articles = requests.get(api_url).json().get('articles', [])
     except: return
@@ -72,22 +71,21 @@ def run():
     for art in articles:
         link, title = art['url'], art['title']
         clean_title = re.sub(r'[^\w\s]', '', title).lower().strip()
-        
         if link in posted_data or clean_title in posted_data: continue
         
         content = get_full_article(link) or art.get('description', "")
         if len(content) < 300: continue
         
-        caption_text = rewrite_to_caption(title, content)
-        if not caption_text or len(caption_text) < 150: continue
+        final_caption = rewrite_text(title, content)
+        if not final_caption or len(final_caption) < 150: continue
         
-        full_caption = f"{caption_text}\n\n🗞 <b>Подпишись на <a href='https://t.me/SUP_V_BotK'>SUP_V_BotK</a></b>"
+        full_text = f"{final_caption}\n\n🗞 <b>Подпишись на <a href='https://t.me/SUP_V_BotK'>SUP_V_BotK</a></b>"
         
         try:
             if art.get('urlToImage'):
-                bot.send_photo(CHANNEL_ID, art['urlToImage'], caption=full_caption[:1024], parse_mode='HTML')
+                bot.send_photo(CHANNEL_ID, art['urlToImage'], caption=full_text[:1024], parse_mode='HTML')
             else:
-                bot.send_message(CHANNEL_ID, full_caption, parse_mode='HTML', disable_web_page_preview=False)
+                bot.send_message(CHANNEL_ID, full_text, parse_mode='HTML', disable_web_page_preview=False)
             save_posted_data(link, title)
             break
         except: continue

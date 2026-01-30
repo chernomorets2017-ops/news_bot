@@ -34,3 +34,4 @@ jobs:
           git add last_links.txt
           git commit -m "Update DB" || exit 0
           git push origin main
+

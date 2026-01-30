@@ -30,45 +30,76 @@ def get_full_article(url):
         soup = BeautifulSoup(response.text, 'html.parser')
         for s in soup(['script', 'style', 'nav', 'footer', 'header', 'aside']): s.decompose()
         text = " ".join([p.get_text() for p in soup.find_all('p')])
-        return text[:2000]
+        return text[:1500]
     except:
         return None
 
 def rewrite_text(title, content):
-    API_URL = "https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Instruct-v0.3"
+    API_URL = "https://api-inference.huggingface.co/models/meta-llama/Meta-Llama-3-8B-Instruct"
     headers = {"Authorization": f"Bearer {HF_TOKEN}"}
-    prompt = f"<s>[INST] перескажи новость как настоящий редактор популярного тгк:\n{title}\n{content[:1500]} [/INST]"
+    
+    prompt = (
+        f"<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n"
+        f"Ты — редактор популярного телеграм-канала. Твоя задача: пересказать новость хайпово, кратко и с эмодзи. <|eot_id|>\n"
+        f"<|start_header_id|>user<|end_header_id|>\n"
+        f"Вот новость: {title}. {content[:1200]}\n\n"
+        f"ТВОЯ ЗАДАЧА: перескажи новость как настоящий редактор популярного тгк <|eot_id|>\n"
+        f"<|start_header_id|>assistant<|end_header_id|>\n"
+    )
+    
     try:
         response = requests.post(API_URL, headers=headers, json={
             "inputs": prompt,
-            "parameters": {"max_new_tokens": 500, "temperature": 0.7}
-        })
+            "parameters": {
+                "max_new_tokens": 450,
+                "temperature": 0.6,
+                "top_p": 0.9,
+                "return_full_text": False
+            }
+        }, timeout=20)
+        
         result = response.json()
-        return result[0]['generated_text'].split("[/INST]")[-1].strip()
+        if isinstance(result, list):
+            text = result[0]['generated_text'].strip()
+        else:
+            text = result['generated_text'].strip()
+            
+        text = re.sub(r'<\|.*?\|>', '', text)
+        return text
     except:
-        return f"🔥 <b>{title}</b>\n\n{content[:300]}..."
+        return None
 
 def run():
-    q = "(YouTube OR TikTok OR скандал OR ЧП OR блогер OR инцидент OR шоубизнес)"
+    q = "(YouTube OR TikTok OR скандал OR ЧП OR блогер OR инцидент OR новости OR криминал OR политика)"
     url = f"https://newsapi.org/v2/everything?q={q}&language=ru&sortBy=publishedAt&apiKey={NEWS_API_KEY}"
+    
     try:
         articles = requests.get(url).json().get('articles', [])
     except: return
+    
     posted_data = get_posted_data()
     random.shuffle(articles)
+    
     for art in articles:
         link = art['url']
         title = art['title']
         clean_title = re.sub(r'[^\w\s]', '', title).lower().strip()
+        
         if link in posted_data or clean_title in posted_data: continue
+        
         raw_text = get_full_article(link)
-        content = raw_text if (raw_text and len(raw_text) > 300) else art.get('description', "")
+        content = raw_text if (raw_text and len(raw_text) > 200) else art.get('description', "")
         if not content: continue
+        
         final_post = rewrite_text(title, content)
+        
         if not final_post or len(final_post) < 100: continue
+        
         caption = f"{final_post}\n\n🗞 <b>Подпишись на <a href='https://t.me/SUP_V_BotK'>SUP_V_BotK</a></b>"
+        
         if len(caption) > 1024:
             caption = caption[:1020] + "..."
+            
         try:
             if art.get('urlToImage'):
                 bot.send_photo(CHANNEL_ID, art['urlToImage'], caption=caption, parse_mode='HTML')
@@ -76,7 +107,8 @@ def run():
                 bot.send_message(CHANNEL_ID, caption, parse_mode='HTML')
             save_posted_data(link, title)
             break
-        except: continue
+        except:
+            continue
 
 if __name__ == "__main__":
     run()

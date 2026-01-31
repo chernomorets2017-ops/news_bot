@@ -36,36 +36,34 @@ def get_full_article(url):
 
 def rewrite_text(title, content):
     prompt = (
-        f"ИНСТРУКЦИЯ: Ты редактор агрессивного новостного канала. Перескажи текст максимально сочно и коротко.\n"
-        f"ЗАПРЕТЫ: Не пиши вежливых фраз, не здоровайся, не используй слова 'Вот ваш текст'.\n\n"
-        f"ДАННЫЕ:\n{title}\n{content[:1500]}\n\n"
+        f"СТРОГОЕ ПРАВИЛО: Выдай только текст поста для Telegram. Не здоровайся, не комментируй, не пиши 'Вот текст'.\n\n"
+        f"ДАННЫЕ:\n"
+        f"Заголовок: {title}\n"
+        f"Текст: {content[:1500]}\n\n"
         f"СТРУКТУРА:\n"
-        f"1. ⚡️ ЖИРНЫЙ ЗАГОЛОВОК (суть капсом).\n"
-        f"2. Короткий разнос ситуации (2-3 предложения своими словами).\n"
-        f"3. Главные цифры или факты через •.\n"
-        f"4. Сделай вывод: что это значит для нас.\n"
-        f"5. 3 хайповых хештега.\n\n"
-        f"ОБЪЕМ: до 500 знаков."
+        f"1. 🔥 **Жирный заголовок**\n"
+        f"2. Суть новости (1-2 предложения).\n"
+        f"3. Факты через •\n"
+        f"4. Итог: что это значит.\n"
+        f"5. 2-3 хештега."
     )
     try:
         with DDGS() as ddgs:
             response = ddgs.chat(prompt, model='gpt-4o-mini')
-            text = response.strip()
-            # Убираем возможный мусор в начале
-            text = re.sub(r'^(Вот|Ваш|Редакторский|Пересказ|Конечно).*:(\s+)?', '', text, flags=re.IGNORECASE)
+            text = response.strip().strip('"')
+            text = re.sub(r'^(Вот|Ваш|Редактор|Конечно|Держите|Текст|Пересказ|Пост).*:(\s+)?', '', text, flags=re.IGNORECASE).strip()
+            last_mark = max(text.rfind('.'), text.rfind('!'), text.rfind('?'), text.rfind('#'))
+            if last_mark != -1 and len(text) > last_mark + 5:
+                text = text[:last_mark + 1]
             return text
     except:
-        return None
+        return f"🔥 <b>{title}</b>\n\n{content[:300]}..."
 
 def run():
-    # Темы, которые ты просил: скандалы, блогеры, чп, гаджеты
-    queries = ["(скандал OR блогер OR ЧП)", "(инцидент OR новости OR YouTube)", "(нейросети OR гаджеты OR технологии)"]
-    q = random.choice(queries)
-    url = f"https://newsapi.org/v2/everything?q={q}&language=ru&sortBy=publishedAt&apiKey={NEWS_API_KEY}"
-    
+    url = f"https://newsapi.org/v2/everything?q=(IT OR технологии OR нейросети)&language=ru&sortBy=publishedAt&apiKey={NEWS_API_KEY}"
     try:
-        r = requests.get(url)
-        articles = r.json().get('articles', [])
+        response = requests.get(url)
+        articles = response.json().get('articles', [])
     except: return
 
     posted_data = get_posted_data()
@@ -83,19 +81,19 @@ def run():
         if not content: continue
 
         final_post = rewrite_text(title, content)
-        if not final_post or len(final_post) < 150:
-            continue
+        if len(final_post) < 150: continue
 
         caption = f"{final_post}\n\n🗞 <b>Подпишись на <a href='https://t.me/SUP_V_BotK'>SUP_V_BotK</a></b>"
         
         try:
             if art.get('urlToImage'):
-                bot.send_photo(CHANNEL_ID, art['urlToImage'], caption=caption[:1024], parse_mode='HTML')
+                bot.send_photo(CHANNEL_ID, art['urlToImage'], caption=caption, parse_mode='HTML')
             else:
                 bot.send_message(CHANNEL_ID, caption, parse_mode='HTML')
             save_posted_data(link, title)
             break
-        except: continue
+        except:
+            continue
 
 if __name__ == "__main__":
     run()

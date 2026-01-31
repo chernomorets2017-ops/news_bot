@@ -32,19 +32,30 @@ def get_full_text(url):
         for s in soup(['script', 'style', 'header', 'footer', 'nav', 'aside']): s.decompose()
         paragraphs = soup.find_all('p')
         text = ' '.join([p.get_text() for p in paragraphs if len(p.get_text()) > 50])
-        return text[:1200]
+        return text[:1500]
     except:
         return None
 
+def smart_trim(text, limit):
+    if len(text) <= limit: return text
+    trimmed = text[:limit]
+    last_dot = trimmed.rfind('.')
+    if last_dot != -1:
+        return trimmed[:last_dot + 1]
+    return trimmed
+
 def format_post(title, full_text):
     emoji = "⚡️"
-    tags = {"сша": "🇺🇸", "трамп": "🇺🇸", "музыка": "🎸", "блогер": "📸", "кино": "🍿"}
+    tags = {"сша": "🇺🇸", "трамп": "🇺🇸", "музыка": "🎸", "блогер": "📸", "кино": "🍿", "политика": "🏛"}
     for word, icon in tags.items():
         if word in title.lower():
             emoji = icon
             break
 
-    post = f"{emoji} **{title.upper()}**\n\n"
+    post_header = f"{emoji} **{title.upper()}**\n\n"
+    footer = "\n\n[📟 .sup.news](https://t.me/SUP_V_BotK)"
+    
+    available_space = 1024 - len(post_header) - len(footer) - 5
     
     if full_text:
         sentences = [s.strip() for s in full_text.split('. ') if len(s) > 10]
@@ -52,15 +63,17 @@ def format_post(title, full_text):
             mid = len(sentences) // 2
             p1 = '. '.join(sentences[:mid]) + '.'
             p2 = '. '.join(sentences[mid:]) + '.'
-            post += f"{p1}\n\n{p2}"
+            body = f"{p1}\n\n{p2}"
         else:
-            post += full_text
-            
-    post += f"\n\n[📟 .sup.news](https://t.me/SUP_V_BotK)"
-    return post
+            body = full_text
+        
+        body = smart_trim(body, available_space)
+        return post_header + body + footer
+    
+    return post_header + footer
 
 def is_bad_content(title):
-    bad_words = ['топ', 'список', 'лучших', 'способов', 'причин', 'советов', 'подборка']
+    bad_words = ['топ', 'список', 'лучших', 'способов', 'причин', 'советов', 'подборка', 'рейтинг']
     for word in bad_words:
         if word in title.lower(): return True
     return False
@@ -87,9 +100,9 @@ def run():
 
                 try:
                     if img and img.startswith("http"):
-                        bot.send_photo(CHANNEL_ID, img, caption=final_post[:1024], parse_mode='Markdown')
+                        bot.send_photo(CHANNEL_ID, img, caption=final_post, parse_mode='Markdown')
                     else:
-                        bot.send_message(CHANNEL_ID, final_post[:4096], parse_mode='Markdown')
+                        bot.send_message(CHANNEL_ID, final_post, parse_mode='Markdown', disable_web_page_preview=True)
                     save_link(l)
                     posted += 1
                     time.sleep(5)

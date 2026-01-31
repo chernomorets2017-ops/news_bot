@@ -23,18 +23,7 @@ def save_link(link):
         f.write(link + "\n")
 
 def rewrite_text_and_format(title, description, link):
-    prompt = f"""
-    Напиши хайповый пост для ТГ-канала.
-    Тема: {title}
-    Суть: {description}
-    
-    Правила:
-    1. 3 коротких абзаца.
-    2. Первый абзац — ЖИРНЫМ (заголовок-молния).
-    3. Добавляй тематические эмодзи-стикеры в начале и конце каждого абзаца (например, 🎸 для музыки, 🇺🇸 для США, 📱 для соцсетей).
-    4. Текст должен быть уникальным и полностью пересказывать суть.
-    5. В конце фраза: [Читать оригинал]({link})
-    """
+    prompt = f"Напиши хайповый пост для ТГ в 3 абзаца с жирным заголовком и эмодзи-стикерами. Тема: {title}. Суть: {description}. Ссылка: {link}"
     try:
         response = client.chat.completions.create(
             model="gpt-3.5-turbo",
@@ -42,25 +31,35 @@ def rewrite_text_and_format(title, description, link):
         )
         return response.choices[0].message.content
     except:
-        return f"⚡️ **{title}**\n\n{description}\n\n[Читать оригинал]({link})"
+        return f"🔥 **{title}**\n\n{description}\n\n[Читать полностью]({link})"
 
 def fetch_news():
-    query = "politics OR music OR influencers OR tiktok OR youtube OR USA OR hollywood"
-    url = f"https://newsapi.org/v2/everything?q={query}&language=ru&sortBy=publishedAt&apiKey={NEWS_API_KEY}"
-    
+    print("Запуск поиска новостей...")
+    # Используем топ-новости технологий и развлечений (самое близкое к медиа/блогерам)
+    url = f"https://newsapi.org/v2/top-headlines?country=rs&category=technology&apiKey={NEWS_API_KEY}"
+    # Если нужно больше политики и США, можно попробовать этот URL вместо верхнего:
+    # url = f"https://newsapi.org/v2/top-headlines?country=us&apiKey={NEWS_API_KEY}"
+
     try:
-        response = requests.get(url).json()
-        articles = response.get("articles", [])
-    except:
+        r = requests.get(url)
+        data = r.json()
+        articles = data.get("articles", [])
+        print(f"Найдено новостей: {len(articles)}")
+    except Exception as e:
+        print(f"Ошибка API: {e}")
         return
 
     processed = get_processed_links()
     
-    for article in articles[:5]:
+    posted_count = 0
+    for article in articles:
+        if posted_count >= 2: break # Публикуем максимум 2 за раз
+        
         link = article["url"]
         if link not in processed:
+            print(f"Публикую: {article['title']}")
             title = article["title"]
-            desc = article["description"] or ""
+            desc = article["description"] or "Нет описания"
             img = article.get("urlToImage")
             
             content = rewrite_text_and_format(title, desc, link)
@@ -71,9 +70,12 @@ def fetch_news():
                 else:
                     bot.send_message(CHANNEL_ID, content, parse_mode='Markdown')
                 save_link(link)
-                time.sleep(10)
-            except:
-                continue
+                posted_count += 1
+                time.sleep(5)
+            except Exception as e:
+                print(f"Ошибка ТГ: {e}")
+        else:
+            print("Новость уже была в канале.")
 
 if __name__ == "__main__":
     fetch_news()

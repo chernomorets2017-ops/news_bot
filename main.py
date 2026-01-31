@@ -21,31 +21,29 @@ def get_processed_links():
 def save_link(link):
     with open(DB_FILE, "a") as f: f.write(link + "\n")
 
-def get_full_text(url):
+def get_clean_text(url):
     try:
-        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
-        r = requests.get(url, headers=headers, timeout=12)
+        headers = {'User-Agent': 'Mozilla/5.0'}
+        r = requests.get(url, headers=headers, timeout=10)
         soup = BeautifulSoup(r.content, 'html.parser')
         for s in soup(['script', 'style', 'header', 'footer', 'nav', 'aside']): s.decompose()
-        text = ' '.join([p.get_text() for p in soup.find_all('p') if len(p.get_text()) > 40])
-        return text[:4000]
+        paragraphs = [p.get_text() for p in soup.find_all('p') if len(p.get_text()) > 60]
+        return " ".join(paragraphs[:6])
     except:
         return None
 
-def ai_summarize(title, body):
+def ai_rewrite(title, text):
     prompt = f"""
-    Ты — автор дерзкого новостного блога. Перескажи эту новость СВОИМИ СЛОВАМИ.
+    Перескажи новость как автор ТГ-блога. 
+    Тема: {title}
+    Суть: {text}
     
-    ТЕМА: {title}
-    ТЕКСТ: {body}
-    
-    ЗАДАЧА:
-    1. Сделай 3 коротких, емких абзаца.
-    2. Первый абзац выдели ЖИРНЫМ (это заголовок-молния).
-    3. Добавь тематические эмодзи (много, по смыслу).
-    4. Стиль: живой, молодежный, как пост в Telegram.
-    5. Весь текст должен быть законченным, без обрывов.
-    6. НЕ ставь ссылку на источник.
+    Требования:
+    - 3 коротких абзаца.
+    - Первый абзац ЖИРНЫМ.
+    - Много тематических эмодзи.
+    - Полная и законченная мысль.
+    - Стиль: живой, авторский.
     """
     try:
         response = client.chat.completions.create(
@@ -57,7 +55,8 @@ def ai_summarize(title, body):
         return None
 
 def run():
-    url = f"https://newsapi.org/v2/everything?q=politics OR music OR USA OR hollywood&language=ru&sortBy=publishedAt&pageSize=10&apiKey={NEWS_API_KEY}"
+    url = f"https://newsapi.org/v2/everything?q=(politics OR music OR bloggers OR hollywood OR USA)&language=ru&sortBy=publishedAt&pageSize=10&apiKey={NEWS_API_KEY}"
+    
     try:
         articles = requests.get(url, timeout=10).json().get("articles", [])
         db = get_processed_links()
@@ -65,32 +64,35 @@ def run():
 
         for a in articles:
             if posted >= 2: break
-            l = a["url"]
-            if l not in db:
-                raw_text = get_full_text(l)
-                source_material = raw_text if raw_text and len(raw_text) > 300 else a.get("description", "")
+            link = a["url"]
+            
+            if link not in db:
+                raw_body = get_clean_text(link)
+                if not raw_body or len(raw_body) < 200:
+                    raw_body = a.get("description", "")
                 
-                if len(source_material) < 150: continue
-                
-                summary = ai_summarize(a["title"], source_material)
+                if not raw_body: continue
+
+                summary = ai_rewrite(a["title"], raw_body)
                 if not summary: continue
 
-                # Добавляем твою зашифрованную ссылку
-                final_post = f"{summary}\n\n[📟 .sup.news](https://t.me/SUP_V_BotK)"
+                footer = "\n\n[📟 .sup.news](https://t.me/SUP_V_BotK)"
+                final_text = summary[:(1020 - len(footer))] + footer
+                
                 img = a.get("urlToImage")
-
                 try:
                     if img and img.startswith("http"):
-                        bot.send_photo(CHANNEL_ID, img, caption=final_post[:1024], parse_mode='Markdown')
+                        bot.send_photo(CHANNEL_ID, img, caption=final_text, parse_mode='Markdown')
                     else:
-                        bot.send_message(CHANNEL_ID, final_post[:4096], parse_mode='Markdown', disable_web_page_preview=True)
+                        bot.send_message(CHANNEL_ID, final_text, parse_mode='Markdown', disable_web_page_preview=True)
                     
-                    save_link(l)
+                    save_link(link)
                     posted += 1
-                    time.sleep(20)
-                except: continue
-    except: pass
+                    time.sleep(15)
+                except:
+                    continue
+    except:
+        pass
 
 if __name__ == "__main__":
     run()
-

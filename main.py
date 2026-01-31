@@ -1,6 +1,7 @@
 import os
 import telebot
 import requests
+import g4f
 from g4f.client import Client
 from bs4 import BeautifulSoup
 import time
@@ -25,57 +26,70 @@ def get_article_content(url):
         headers = {'User-Agent': 'Mozilla/5.0'}
         r = requests.get(url, headers=headers, timeout=10)
         soup = BeautifulSoup(r.content, 'html.parser')
-        for s in soup(['script', 'style', 'header', 'footer', 'nav']): s.decompose()
+        for s in soup(['script', 'style', 'header', 'footer', 'nav', 'aside']): s.decompose()
         text = ' '.join([p.get_text() for p in soup.find_all('p')])
-        return text[:4000] if len(text) > 200 else None
-    except:
+        return text[:4000] if len(text) > 300 else None
+    except Exception as e:
+        print(f"Scraper error: {e}")
         return None
 
 def make_post(title, body, link):
-    prompt = f"Напиши пост для ТГ. Тема: {title}. Текст: {body}. Инструкция: 3 полных абзаца, первый - жирным, много тематических эмодзи, без упоминания сторонних сайтов, только суть. Язык: русский. Ссылка для вставки: {link}"
+    prompt = f"Напиши пост для ТГ на русском. 3 абзаца, жирный заголовок, много эмодзи. Тема: {title}. Текст: {body}. Ссылка: {link}"
     try:
         response = client.chat.completions.create(
             model="gpt-4o",
-            messages=[{"role": "user", "content": prompt}]
+            messages=[{"role": "user", "content": prompt}],
+            provider=g4f.Provider.ChatGptEs # Используем стабильный провайдер
         )
-        res = response.choices[0].message.content
-        if "Читать полностью" not in res:
-            res += f"\n\n[Читать полностью]({link})"
-        return res
-    except:
+        return response.choices[0].message.content
+    except Exception as e:
+        print(f"AI error: {e}")
         return None
 
 def run():
-    url = f"https://newsapi.org/v2/everything?q=politics OR music OR USA OR hollywood&language=ru&sortBy=publishedAt&pageSize=10&apiKey={NEWS_API_KEY}"
-    try:
-        articles = requests.get(url).json().get("articles", [])
-    except: return
-
+    print("Starting news fetch...")
+    # Ищем и по России, и по США для максимального охвата
+    urls = [
+        f"https://newsapi.org/v2/top-headlines?country=us&apiKey={NEWS_API_KEY}",
+        f"https://newsapi.org/v2/everything?q=politics OR music OR bloggers&language=ru&sortBy=publishedAt&apiKey={NEWS_API_KEY}"
+    ]
+    
     db = get_processed_links()
-    count = 0
+    posted = 0
 
-    for a in articles:
-        if count >= 2: break
-        l = a["url"]
-        if l not in db:
-            full_text = get_article_content(l)
-            source = full_text if full_text else a.get("description", "")
+    for url in urls:
+        if posted >= 2: break
+        try:
+            articles = requests.get(url).json().get("articles", [])
+            print(f"Found {len(articles)} articles in source")
             
-            if len(source) < 100: continue
-            
-            post = make_post(a["title"], source, l)
-            if not post or "извините" in post.lower(): continue
+            for a in articles:
+                if posted >= 2: break
+                l = a["url"]
+                if l not in db:
+                    print(f"Analyzing: {a['title']}")
+                    full_text = get_article_content(l)
+                    source = full_text if full_text else a.get("description", "")
+                    
+                    if not source or len(source) < 150:
+                        print("Content too short, skipping...")
+                        continue
+                    
+                    post = make_post(a["title"], source, l)
+                    if not post: continue
 
-            img = a.get("urlToImage")
-            try:
-                if img and img.startswith("http"):
-                    bot.send_photo(CHANNEL_ID, img, caption=post, parse_mode='Markdown')
-                else:
-                    bot.send_message(CHANNEL_ID, post, parse_mode='Markdown', disable_web_page_preview=True)
-                save_link(l)
-                count += 1
-                time.sleep(15)
-            except: continue
+                    img = a.get("urlToImage")
+                    if img and img.startswith("http"):
+                        bot.send_photo(CHANNEL_ID, img, caption=post[:1024], parse_mode='Markdown')
+                    else:
+                        bot.send_message(CHANNEL_ID, post, parse_mode='Markdown', disable_web_page_preview=True)
+                    
+                    save_link(l)
+                    posted += 1
+                    print("SUCCESS: Posted to Telegram")
+                    time.sleep(15)
+        except Exception as e:
+            print(f"Loop error: {e}")
 
 if __name__ == "__main__":
     run()

@@ -29,37 +29,33 @@ def get_full_article(url):
         response = requests.get(url, headers=headers, timeout=15)
         soup = BeautifulSoup(response.text, 'html.parser')
         for s in soup(['script', 'style', 'nav', 'footer', 'header', 'aside']): s.decompose()
-        return " ".join([p.get_text() for p in soup.find_all('p')])[:2500]
+        text = " ".join([p.get_text() for p in soup.find_all('p')])
+        return text[:2500]
     except:
         return None
 
 def rewrite_text(title, content):
-    system_prompt = (
-        "Ты — дерзкий редактор молодежного СМИ. Твоя задача: пересказать новость СВОИМИ словами.\n"
-        "ЗАПРЕЩЕНО: копировать предложения из оригинала.\n"
-        "НУЖНО: использовать сленг, иронию и делать текст коротким.\n\n"
-        f"НОВОСТЬ: {title}\n"
-        f"ТЕКСТ: {content[:1500]}\n\n"
-        "СТРУКТУРА:\n"
-        "1. Заголовок капсом с эмодзи.\n"
-        "2. Суть в 2-3 предложениях (пересказ).\n"
-        "3. 3 коротких факта (буллиты •).\n"
-        "4. Вопрос в конце.\n"
-        "5. 3 хештега."
+    prompt = (
+        f"Напиши уникальный пост для ТГ-канала по этим фактам. Не копируй предложения.\n\n"
+        f"ИНФО: {title}. {content[:1500]}\n\n"
+        f"ФОРМАТ:\n"
+        f"1. Жирный заголовок с эмодзи\n"
+        f"2. Текст (2-3 абзаца, живая подача)\n"
+        f"3. 3 факта через •\n"
+        f"4. Вопрос в конце\n"
+        f"5. 3 хештега"
     )
     try:
         with DDGS() as ddgs:
-            response = ddgs.chat(system_prompt, model='gpt-4o-mini')
+            response = ddgs.chat(prompt, model='gpt-4o-mini')
             text = response.strip()
-            # Убираем мусор, если нейронка начнет вежливость включать
             text = re.sub(r'^(Вот|Конечно|Держи|Редактор).*:(\s+)?', '', text, flags=re.IGNORECASE)
             return text
     except:
         return None
 
 def run():
-    # Расширил темы, чтобы новости всегда были
-    queries = ["технологии", "нейросети", "блогеры", "скандалы", "гаджеты"]
+    queries = ["блогеры", "скандал", "ЧП", "новости", "инцидент"]
     q = random.choice(queries)
     url = f"https://newsapi.org/v2/everything?q={q}&language=ru&sortBy=publishedAt&apiKey={NEWS_API_KEY}"
     
@@ -74,7 +70,6 @@ def run():
     for art in articles:
         link, title = art['url'], art['title']
         clean_title = re.sub(r'[^\w\s]', '', title).lower().strip()
-        
         if link in posted_data or clean_title in posted_data: continue
         
         raw_text = get_full_article(link)

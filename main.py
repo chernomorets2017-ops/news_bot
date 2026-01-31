@@ -21,13 +21,13 @@ def save_link(link):
 
 def get_full_text(url):
     try:
-        headers = {'User-Agent': 'Mozilla/5.0'}
+        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
         r = requests.get(url, headers=headers, timeout=10)
         soup = BeautifulSoup(r.content, 'html.parser')
         for s in soup(['script', 'style', 'header', 'footer', 'nav', 'aside']): s.decompose()
         paragraphs = soup.find_all('p')
         text = ' '.join([p.get_text() for p in paragraphs if len(p.get_text()) > 50])
-        return text[:1500]
+        return text[:2000]
     except:
         return None
 
@@ -41,11 +41,11 @@ def smart_trim(text, limit):
 
 def ai_rewrite(title, text):
     try:
-        prompt = f"Перескажи новость кратко и хайпово для ТГ. 3 абзаца, первый жирным, много эмодзи. Тема: {title}. Текст: {text}"
+        prompt = f"Перескажи новость как автор ТГ-блога СВОИМИ СЛОВАМИ. Тема: {title}. Текст: {text}. Правила: 3 абзаца, первый жирным, много эмодзи, БЕЗ ССЫЛОК, мысль должна быть закончена."
         response = g4f.ChatCompletion.create(
             model="gpt-4o",
             messages=[{"role": "user", "content": prompt}],
-            timeout=20
+            timeout=25
         )
         return response
     except:
@@ -62,7 +62,7 @@ def format_fallback(title, text):
     return f"{emoji} **{title.upper()}**\n\n{clean_text}"
 
 def run():
-    url = f"https://newsapi.org/v2/everything?q=politics OR music OR USA OR hollywood&language=ru&sortBy=publishedAt&pageSize=10&apiKey={NEWS_API_KEY}"
+    url = f"https://newsapi.org/v2/everything?q=(politics OR music OR bloggers OR USA OR hollywood)&language=ru&sortBy=publishedAt&pageSize=10&apiKey={NEWS_API_KEY}"
     try:
         r = requests.get(url, timeout=10)
         articles = r.json().get("articles", [])
@@ -75,21 +75,24 @@ def run():
                 title = a.get("title", "")
                 raw_content = get_full_text(l) or a.get("description", "")
                 if not raw_content or len(raw_content) < 150: continue
+                
                 final_post = ai_rewrite(title, raw_content)
                 if not final_post:
                     final_post = format_fallback(title, raw_content)
+                
                 footer = "\n\n[📟 .sup.news](https://t.me/SUP_V_BotK)"
-                limit = 1000 - len(footer)
+                limit = 1010 - len(footer)
                 final_post = smart_trim(final_post, limit) + footer
+                
                 img = a.get("urlToImage")
                 try:
                     if img and img.startswith("http"):
                         bot.send_photo(CHANNEL_ID, img, caption=final_post, parse_mode='Markdown')
                     else:
-                        bot.send_message(CHANNEL_ID, final_post, parse_mode='Markdown')
+                        bot.send_message(CHANNEL_ID, final_post, parse_mode='Markdown', disable_web_page_preview=True)
                     save_link(l)
                     posted += 1
-                    time.sleep(10)
+                    time.sleep(15)
                 except: continue
     except: pass
 

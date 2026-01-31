@@ -13,7 +13,13 @@ bot = telebot.TeleBot(BOT_TOKEN)
 
 def get_processed_links():
     if not os.path.exists(DB_FILE): return []
-    with open(DB_FILE, "r") as f: return f.read().splitlines()
+    with open(DB_FILE, "r") as f: 
+        lines = f.read().splitlines()
+        if len(lines) > 100:
+            with open(DB_FILE, "w") as fw:
+                fw.write("\n".join(lines[-50:]))
+            return lines[-50:]
+        return lines
 
 def save_link(link):
     with open(DB_FILE, "a") as f: f.write(link + "\n")
@@ -32,12 +38,7 @@ def get_full_text(url):
 
 def format_post(title, full_text):
     emoji = "⚡️"
-    tags = {
-        "apple": "🍏", "iphone": "📱", "сша": "🇺🇸", "трамп": "🇺🇸", "байден": "🇺🇸",
-        "музыка": "🎸", "певец": "🎤", "рэп": "🎧", "блогер": "📸", "tiktok": "🎬",
-        "кино": "🍿", "голливуд": "🌟", "политика": "🏛", "интервью": "🎙"
-    }
-    
+    tags = {"сша": "🇺🇸", "трамп": "🇺🇸", "музыка": "🎸", "блогер": "📸", "кино": "🍿"}
     for word, icon in tags.items():
         if word in title.lower():
             emoji = icon
@@ -46,22 +47,26 @@ def format_post(title, full_text):
     post = f"{emoji} **{title.upper()}**\n\n"
     
     if full_text:
-        sentences = full_text.split('. ')
-        if len(sentences) > 4:
-            count = len(sentences)
-            p1 = '. '.join(sentences[:count//3]) + '.'
-            p2 = '. '.join(sentences[count//3:2*count//3]) + '.'
-            p3 = '. '.join(sentences[2*count//3:]) + '.'
-            post += f"{p1}\n\n{p2}\n\n{p3}"
+        sentences = [s.strip() for s in full_text.split('. ') if len(s) > 10]
+        if len(sentences) > 2:
+            mid = len(sentences) // 2
+            p1 = '. '.join(sentences[:mid]) + '.'
+            p2 = '. '.join(sentences[mid:]) + '.'
+            post += f"{p1}\n\n{p2}"
         else:
             post += full_text
             
     post += f"\n\n[📟 .sup.news](https://t.me/SUP_V_BotK)"
     return post
 
+def is_bad_content(title):
+    bad_words = ['топ', 'список', 'лучших', 'способов', 'причин', 'советов', 'подборка']
+    for word in bad_words:
+        if word in title.lower(): return True
+    return False
+
 def run():
-    url = f"https://newsapi.org/v2/everything?q=politics OR music OR bloggers OR USA OR hollywood&language=ru&sortBy=publishedAt&pageSize=10&apiKey={NEWS_API_KEY}"
-    
+    url = f"https://newsapi.org/v2/everything?q=politics OR music OR bloggers OR USA OR hollywood&language=ru&sortBy=publishedAt&pageSize=15&apiKey={NEWS_API_KEY}"
     try:
         r = requests.get(url, timeout=10)
         articles = r.json().get("articles", [])
@@ -71,15 +76,11 @@ def run():
         for a in articles:
             if posted >= 2: break
             l = a["url"]
+            title = a.get("title", "")
             
-            if l not in db:
-                title = a.get("title", "")
+            if l not in db and not is_bad_content(title):
                 content = get_full_text(l)
-                
-                if not content or len(content) < 200:
-                    content = a.get("description", "")
-                    if not content or "…" in content or "..." in content:
-                        continue
+                if not content or len(content) < 300: continue
 
                 final_post = format_post(title, content)
                 img = a.get("urlToImage")
@@ -89,14 +90,11 @@ def run():
                         bot.send_photo(CHANNEL_ID, img, caption=final_post[:1024], parse_mode='Markdown')
                     else:
                         bot.send_message(CHANNEL_ID, final_post[:4096], parse_mode='Markdown')
-                    
                     save_link(l)
                     posted += 1
                     time.sleep(5)
-                except:
-                    continue
-    except:
-        pass
+                except: continue
+    except: pass
 
 if __name__ == "__main__":
     run()

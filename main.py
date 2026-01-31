@@ -47,11 +47,11 @@ def format_post(title, full_text):
     
     if full_text:
         sentences = full_text.split('. ')
-        if len(sentences) > 6:
-            mid = len(sentences) // 3
-            p1 = '. '.join(sentences[:mid]) + '.'
-            p2 = '. '.join(sentences[mid:mid*2]) + '.'
-            p3 = '. '.join(sentences[mid*2:]) + '.'
+        if len(sentences) > 4:
+            count = len(sentences)
+            p1 = '. '.join(sentences[:count//3]) + '.'
+            p2 = '. '.join(sentences[count//3:2*count//3]) + '.'
+            p3 = '. '.join(sentences[2*count//3:]) + '.'
             post += f"{p1}\n\n{p2}\n\n{p3}"
         else:
             post += full_text

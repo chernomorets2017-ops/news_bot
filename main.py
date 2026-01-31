@@ -29,7 +29,7 @@ def get_full_article(url):
         response = requests.get(url, headers=headers, timeout=10)
         soup = BeautifulSoup(response.text, 'html.parser')
         for s in soup(['script', 'style', 'nav', 'footer', 'header', 'aside']): s.decompose()
-        return " ".join([p.get_text() for p in soup.find_all('p')])[:2000]
+        return " ".join([p.get_text() for p in soup.find_all('p')])[:2500]
     except:
         return None
 
@@ -37,29 +37,31 @@ def rewrite_text(title, content):
     url = "https://openrouter.ai/api/v1/chat/completions"
     headers = {"Authorization": f"Bearer {OR_TOKEN}", "Content-Type": "application/json"}
     
-    instruction = (
-        f"Новость: {title}\n"
+    prompt = (
+        f"Ниже предоставлена новость. Твоя задача — полностью переписать её для Телеграм-канала.\n\n"
+        f"ИСХОДНИКИ:\n"
+        f"Заголовок: {title}\n"
         f"Текст: {content[:1500]}\n\n"
-        f"Сделай готовый пост:\n"
-        f"1. Заголовок с эмодзи\n"
-        f"2. Суть в 2 абзаца своими словами\n"
-        f"3. Три главных факта через •\n"
-        f"4. Вопрос читателям\n"
-        f"5. 3 хештега"
+        f"СТРУКТУРА ОТВЕТА (ПИШИ ТОЛЬКО ТАК):\n"
+        f"• Начни с броского заголовка и эмодзи\n"
+        f"• Далее 2-3 коротких абзаца текста (расскажи историю заново, не копируй фразы)\n"
+        f"• Список из 3 ключевых тезисов через буллит •\n"
+        f"• Заверши вопрос-подводкой к комментариям\n"
+        f"• В конце 3 тематических хештега"
     )
     
     try:
         response = requests.post(url, headers=headers, json={
             "model": "google/gemini-flash-1.5",
-            "messages": [{"role": "user", "content": instruction}],
-            "temperature": 0.8
+            "messages": [{"role": "user", "content": prompt}],
+            "temperature": 0.9
         }, timeout=25)
         return response.json()['choices'][0]['message']['content'].strip()
     except:
         return None
 
 def run():
-    api_url = f"https://newsapi.org/v2/everything?q=(блогер OR скандал OR ЧП OR новости OR инцидент)&language=ru&sortBy=publishedAt&apiKey={NEWS_API_KEY}"
+    api_url = f"https://newsapi.org/v2/everything?q=(блогер OR скандал OR ЧП OR инцидент OR шоубиз)&language=ru&sortBy=publishedAt&apiKey={NEWS_API_KEY}"
     try:
         r = requests.get(api_url)
         articles = r.json().get('articles', [])
@@ -74,10 +76,10 @@ def run():
         if link in posted_data or clean_title in posted_data: continue
         
         content = get_full_article(link) or art.get('description', "")
-        if not content or len(content) < 150: continue
+        if not content or len(content) < 200: continue
         
         final_post = rewrite_text(title, content)
-        if not final_post: continue
+        if not final_post or len(final_post) < 150: continue
         
         full_text = f"{final_post}\n\n🗞 <b>Подпишись на <a href='https://t.me/SUP_V_BotK'>SUP_V_BotK</a></b>"
         

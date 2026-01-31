@@ -1,4 +1,5 @@
+feedparser
 pyTelegramBotAPI
-requests
+g4f
 beautifulsoup4
-duckduckgo-search
+requests

@@ -23,61 +23,48 @@ def save_link(link):
 
 def get_clean_text(url):
     try:
-        headers = {'User-Agent': 'Mozilla/5.0'}
+        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
         r = requests.get(url, headers=headers, timeout=10)
         soup = BeautifulSoup(r.content, 'html.parser')
         for s in soup(['script', 'style', 'header', 'footer', 'nav', 'aside']): s.decompose()
         paragraphs = [p.get_text() for p in soup.find_all('p') if len(p.get_text()) > 60]
-        return " ".join(paragraphs[:6])
+        return " ".join(paragraphs[:5])
     except:
         return None
 
 def ai_rewrite(title, text):
-    prompt = f"""
-    Перескажи новость как автор ТГ-блога. 
-    Тема: {title}
-    Суть: {text}
-    
-    Требования:
-    - 3 коротких абзаца.
-    - Первый абзац ЖИРНЫМ.
-    - Много тематических эмодзи.
-    - Полная и законченная мысль.
-    - Стиль: живой, авторский.
-    """
+    prompt = f"Перескажи новость как блогер. Тема: {title}. Текст: {text}. Правила: 3 абзаца, первый жирным, много эмодзи, законченная мысль."
     try:
+        # Ограничиваем время ожидания ответа от ИИ до 25 секунд
         response = client.chat.completions.create(
             model="gpt-4o",
-            messages=[{"role": "user", "content": prompt}]
+            messages=[{"role": "user", "content": prompt}],
+            timeout=25 
         )
         return response.choices[0].message.content
     except:
         return None
 
 def run():
-    url = f"https://newsapi.org/v2/everything?q=(politics OR music OR bloggers OR hollywood OR USA)&language=ru&sortBy=publishedAt&pageSize=10&apiKey={NEWS_API_KEY}"
-    
+    url = f"https://newsapi.org/v2/everything?q=(politics OR music OR bloggers OR USA)&language=ru&sortBy=publishedAt&pageSize=10&apiKey={NEWS_API_KEY}"
     try:
-        articles = requests.get(url, timeout=10).json().get("articles", [])
+        r = requests.get(url, timeout=10)
+        articles = r.json().get("articles", [])
         db = get_processed_links()
         posted = 0
 
         for a in articles:
             if posted >= 2: break
             link = a["url"]
-            
             if link not in db:
-                raw_body = get_clean_text(link)
-                if not raw_body or len(raw_body) < 200:
-                    raw_body = a.get("description", "")
-                
-                if not raw_body: continue
+                body = get_clean_text(link) or a.get("description", "")
+                if len(body) < 150: continue
 
-                summary = ai_rewrite(a["title"], raw_body)
+                summary = ai_rewrite(a["title"], body)
                 if not summary: continue
 
                 footer = "\n\n[📟 .sup.news](https://t.me/SUP_V_BotK)"
-                final_text = summary[:(1020 - len(footer))] + footer
+                final_text = summary[:(1024 - len(footer) - 5)] + footer
                 
                 img = a.get("urlToImage")
                 try:
@@ -88,11 +75,9 @@ def run():
                     
                     save_link(link)
                     posted += 1
-                    time.sleep(15)
-                except:
-                    continue
-    except:
-        pass
+                    time.sleep(10)
+                except: continue
+    except: pass
 
 if __name__ == "__main__":
     run()

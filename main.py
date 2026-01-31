@@ -3,6 +3,7 @@ import telebot
 import requests
 from g4f.client import Client
 import time
+import re
 
 BOT_TOKEN = "8546746980:AAF3z5K85WaBMC-SKTSTN5Tx_dXxXyZXIoQ"
 CHANNEL_ID = "@SUP_V_BotK"
@@ -22,16 +23,17 @@ def save_link(link):
     with open(DB_FILE, "a") as f:
         f.write(link + "\n")
 
-def rewrite_text(title, description):
-    prompt = f"Перепиши новость для соцсетей. Сделай текст уникальным, коротким и хайповым. Используй эмодзи. Тема: {title}. Суть: {description}"
+def rewrite_text_and_format(title, description, link):
+    prompt = f"Напиши хайповый пост для ТГ-канала до 300 симв. Используй жирный шрифт для заголовка, эмодзи и курсив. Сделай уникально. Тема: {title}. Суть: {description}. Ссылка: {link}"
     try:
         response = client.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=[{"role": "user", "content": prompt}]
         )
-        return response.choices[0].message.content
+        text = response.choices[0].message.content
+        return text[:300] + f"\n\n[Читать полностью]({link})" if len(text) > 300 else text
     except:
-        return f"⚡️ {title}\n\n{description}"
+        return f"**{title}**\n\n{description[:150]}...\n\n[Читать полностью]({link})"
 
 def fetch_news():
     query = "politics OR music OR influencers OR tiktok OR youtube OR USA OR hollywood"
@@ -50,14 +52,17 @@ def fetch_news():
         if link not in processed:
             title = article["title"]
             desc = article["description"] or ""
+            img = article.get("urlToImage")
             
-            final_text = rewrite_text(title, desc)
-            message = f"{final_text}\n\n📎 {link}"
+            content = rewrite_text_and_format(title, desc, link)
             
             try:
-                bot.send_message(CHANNEL_ID, message)
+                if img and img.startswith("http"):
+                    bot.send_photo(CHANNEL_ID, img, caption=content, parse_mode='Markdown')
+                else:
+                    bot.send_message(CHANNEL_ID, content, parse_mode='Markdown', disable_web_page_preview=False)
                 save_link(link)
-                time.sleep(5)
+                time.sleep(10)
             except:
                 continue
 

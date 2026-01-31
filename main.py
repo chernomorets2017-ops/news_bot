@@ -96,3 +96,7 @@ def run():
                 bot.send_message(CHANNEL_ID, caption, parse_mode='HTML')
             save_posted_data(link, title)
             break
+        except: continue
+
+if __name__ == "__main__":
+    run()

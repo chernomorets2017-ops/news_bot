@@ -3,7 +3,6 @@ import telebot
 import requests
 from g4f.client import Client
 import time
-import re
 
 BOT_TOKEN = "8546746980:AAF3z5K85WaBMC-SKTSTN5Tx_dXxXyZXIoQ"
 CHANNEL_ID = "@SUP_V_BotK"
@@ -24,16 +23,26 @@ def save_link(link):
         f.write(link + "\n")
 
 def rewrite_text_and_format(title, description, link):
-    prompt = f"Напиши хайповый пост для ТГ-канала до 300 симв. Используй жирный шрифт для заголовка, эмодзи и курсив. Сделай уникально. Тема: {title}. Суть: {description}. Ссылка: {link}"
+    prompt = f"""
+    Напиши хайповый пост для ТГ-канала.
+    Тема: {title}
+    Суть: {description}
+    
+    Правила:
+    1. 3 коротких абзаца.
+    2. Первый абзац — ЖИРНЫМ (заголовок-молния).
+    3. Добавляй тематические эмодзи-стикеры в начале и конце каждого абзаца (например, 🎸 для музыки, 🇺🇸 для США, 📱 для соцсетей).
+    4. Текст должен быть уникальным и полностью пересказывать суть.
+    5. В конце фраза: [Читать оригинал]({link})
+    """
     try:
         response = client.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=[{"role": "user", "content": prompt}]
         )
-        text = response.choices[0].message.content
-        return text[:300] + f"\n\n[Читать полностью]({link})" if len(text) > 300 else text
+        return response.choices[0].message.content
     except:
-        return f"**{title}**\n\n{description[:150]}...\n\n[Читать полностью]({link})"
+        return f"⚡️ **{title}**\n\n{description}\n\n[Читать оригинал]({link})"
 
 def fetch_news():
     query = "politics OR music OR influencers OR tiktok OR youtube OR USA OR hollywood"
@@ -60,7 +69,7 @@ def fetch_news():
                 if img and img.startswith("http"):
                     bot.send_photo(CHANNEL_ID, img, caption=content, parse_mode='Markdown')
                 else:
-                    bot.send_message(CHANNEL_ID, content, parse_mode='Markdown', disable_web_page_preview=False)
+                    bot.send_message(CHANNEL_ID, content, parse_mode='Markdown')
                 save_link(link)
                 time.sleep(10)
             except:
@@ -68,4 +77,3 @@ def fetch_news():
 
 if __name__ == "__main__":
     fetch_news()
-

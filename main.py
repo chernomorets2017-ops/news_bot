@@ -20,75 +20,62 @@ def get_processed_links():
 def save_link(link):
     with open(DB_FILE, "a") as f: f.write(link + "\n")
 
-def get_full_article_text(url):
+def get_article_content(url):
     try:
-        response = requests.get(url, timeout=10)
-        soup = BeautifulSoup(response.content, 'html.parser')
-        paragraphs = soup.find_all('p')
-        full_text = " ".join([p.get_text() for p in paragraphs])
-        return full_text[:3500]
+        headers = {'User-Agent': 'Mozilla/5.0'}
+        r = requests.get(url, headers=headers, timeout=10)
+        soup = BeautifulSoup(r.content, 'html.parser')
+        for s in soup(['script', 'style', 'header', 'footer', 'nav']): s.decompose()
+        text = ' '.join([p.get_text() for p in soup.find_all('p')])
+        return text[:4000] if len(text) > 200 else None
     except:
         return None
 
-def rewrite_text_and_format(title, raw_body, link):
-    prompt = f"""
-    Write a news post for Telegram.
-    Title: {title}
-    Source text: {raw_body}
-    
-    Rules:
-    1. Exactly 3 distinct paragraphs. Complete the story fully.
-    2. First paragraph must be BOLD (⚡️ CATCHY HEADLINE).
-    3. Use thematic emojis and stickers.
-    4. Do not mention the original source website name.
-    5. No cut-off sentences.
-    6. Language: Russian.
-    
-    End with: [Читать полностью]({link})
-    """
+def make_post(title, body, link):
+    prompt = f"Напиши пост для ТГ. Тема: {title}. Текст: {body}. Инструкция: 3 полных абзаца, первый - жирным, много тематических эмодзи, без упоминания сторонних сайтов, только суть. Язык: русский. Ссылка для вставки: {link}"
     try:
         response = client.chat.completions.create(
-            model="gpt-3.5-turbo",
+            model="gpt-4o",
             messages=[{"role": "user", "content": prompt}]
         )
-        return response.choices[0].message.content
+        res = response.choices[0].message.content
+        if "Читать полностью" not in res:
+            res += f"\n\n[Читать полностью]({link})"
+        return res
     except:
-        return f"**{title}**\n\nНовость уже в канале! Подробности по ссылке ниже.\n\n[Читать]({link})"
+        return None
 
-def fetch_news():
-    query = "politics OR music OR influencers OR USA OR hollywood"
-    url = f"https://newsapi.org/v2/everything?q={query}&language=ru&sortBy=publishedAt&pageSize=15&apiKey={NEWS_API_KEY}"
-    
+def run():
+    url = f"https://newsapi.org/v2/everything?q=politics OR music OR USA OR hollywood&language=ru&sortBy=publishedAt&pageSize=10&apiKey={NEWS_API_KEY}"
     try:
         articles = requests.get(url).json().get("articles", [])
     except: return
 
-    processed = get_processed_links()
-    posted = 0
-    
-    for article in articles:
-        if posted >= 2: break
-        link = article["url"]
-        
-        if link not in processed:
-            title = article["title"]
-            full_content = get_full_article_text(link)
-            content_to_use = full_content if full_content and len(full_content) > 400 else article["description"]
+    db = get_processed_links()
+    count = 0
+
+    for a in articles:
+        if count >= 2: break
+        l = a["url"]
+        if l not in db:
+            full_text = get_article_content(l)
+            source = full_text if full_text else a.get("description", "")
             
-            final_post = rewrite_text_and_format(title, content_to_use, link)
-            img = article.get("urlToImage")
+            if len(source) < 100: continue
             
+            post = make_post(a["title"], source, l)
+            if not post or "извините" in post.lower(): continue
+
+            img = a.get("urlToImage")
             try:
                 if img and img.startswith("http"):
-                    bot.send_photo(CHANNEL_ID, img, caption=final_post, parse_mode='Markdown')
+                    bot.send_photo(CHANNEL_ID, img, caption=post, parse_mode='Markdown')
                 else:
-                    bot.send_message(CHANNEL_ID, final_post, parse_mode='Markdown')
-                
-                save_link(link)
-                posted += 1
-                time.sleep(10)
-            except:
-                continue
+                    bot.send_message(CHANNEL_ID, post, parse_mode='Markdown', disable_web_page_preview=True)
+                save_link(l)
+                count += 1
+                time.sleep(15)
+            except: continue
 
 if __name__ == "__main__":
-    fetch_news()
+    run()

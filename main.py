@@ -34,37 +34,37 @@ def get_full_article(url):
     except:
         return None
 
-def generate_caption(title, content):
-    task = (
-        f"Сформируй подпись (caption) для поста в Телеграм по следующим данным:\n"
-        f"ТЕМА: {title}\n"
+def rewrite_text(title, content):
+ return f"Ты — редактор топового новостного ТГ-канала. Сделай краткий и полезный пересказ.\n\n"
+        f"ЗАГОЛОВОК: {title}\n"
         f"ТЕКСТ: {content[:1500]}\n\n"
-        f"ТРЕБОВАНИЯ К ПОДПИСИ:\n"
-        f"1. Сделай уникальный рерайт (не копируй предложения).\n"
-        f"2. В начале — заголовок с подходящим эмодзи.\n"
-        f"3. Суть события в 2-3 энергичных предложениях.\n"
-        f"4. 3 главных факта списком через •.\n"
-        f"5. Провокационный вопрос в конце.\n"
-        f"6. 3 тематических хештега.\n"
-        f"Итоговый текст должен быть полностью готов к публикации, без лишних слов от тебя."
-    )
-    try:
-        with DDGS() as ddgs:
-            response = ddgs.chat(task, model='gpt-4o-mini')
-            text = response.strip()
-            text = re.sub(r'^(Вот|Ваш|Подпись|Текст).*:(\s+)?', '', text, flags=re.IGNORECASE)
-            return text
-    except:
-        return None
-
-def run():
-    queries = ["(скандал OR блогер OR ЧП)", "(инцидент OR новости OR YouTube)", "(нейросети OR гаджеты OR технологии)"]
-    q = random.choice(queries)
-    url = f"https://newsapi.org/v2/everything?q={q}&language=ru&sortBy=publishedAt&apiKey={NEWS_API_KEY}"
+        f"ПРАВИЛА ОФОРМЛЕНИЯ (КАК В ЭТАЛОНЕ):\n"
+        f"1. 💰 (или другой смайл по теме) Жирный заголовок: четкая суть.\n"
+        f"2. Короткое вступление в 1-2 предложения (что случилось/что разъяснили).\n"
+        f"3. Список ключевых фактов или цифр через буллиты (•).\n"
+        f"4. Блок 'Главное для читателя' или совет: что нужно сделать прямо сейчас.\n"
+        f"5. В конце добавь уместные хештеги.\n\n"
+        f"ТРЕБОВАНИЯ: Пиши информативно, без воды. Текст должен быть полностью закончен. Объем до 600 знаков."
     
     try:
-        r = requests.get(url)
-        articles = r.json().get('articles', [])
+        with DDGS() as ddgs:
+            response = ddgs.chat(prompt, model='gpt-4o-mini')
+            text = response.strip()
+            
+    
+            text = re.sub(r'^(Вот|Ваш|Редакторский).*:(\s+)?', '', text)
+            
+            last_mark = max(text.rfind('.'), text.rfind('!'), text.rfind('?'))
+            if last_mark != -1 and len(text) > last_mark + 5:
+                text = text[:last_mark + 1]
+            return text
+    except:
+        return f"🔥 <b>{title}</b>\n\n{content[:300]}..."
+
+def run():
+    url = f"https://newsapi.org/v2/everything?q=(IT OR технологии OR нейросети)&language=ru&sortBy=publishedAt&apiKey={NEWS_API_KEY}"
+    try:
+        articles = requests.get(url).json().get('articles', [])
     except: return
 
     posted_data = get_posted_data()
@@ -81,17 +81,18 @@ def run():
         content = raw_text if (raw_text and len(raw_text) > 300) else art.get('description', "")
         if not content: continue
 
-        final_caption = generate_caption(title, content)
-        if not final_caption or len(final_caption) < 150:
+        final_post = rewrite_text(title, content)
+        
+        if len(final_post) < 150:
             continue
 
-        full_caption = f"{final_caption}\n\n🗞 <b>Подпишись на <a href='https://t.me/SUP_V_BotK'>SUP_V_BotK</a></b>"
+        caption = f"{final_post}\n\n🗞 <b>Подпишись на <a href='https://t.me/SUP_V_BotK'>SUP_V_BotK</a></b>"
         
         try:
             if art.get('urlToImage'):
-                bot.send_photo(CHANNEL_ID, art['urlToImage'], caption=full_caption[:1024], parse_mode='HTML')
+                bot.send_photo(CHANNEL_ID, art['urlToImage'], caption=caption, parse_mode='HTML')
             else:
-                bot.send_message(CHANNEL_ID, full_caption, parse_mode='HTML')
+                bot.send_message(CHANNEL_ID, caption, parse_mode='HTML')
             save_posted_data(link, title)
             break
         except: continue

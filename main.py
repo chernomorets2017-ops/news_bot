@@ -2,6 +2,7 @@ import os
 import telebot
 import requests
 from g4f.client import Client
+from bs4 import BeautifulSoup
 import time
 
 BOT_TOKEN = "8546746980:AAF3z5K85WaBMC-SKTSTN5Tx_dXxXyZXIoQ"
@@ -13,17 +14,38 @@ bot = telebot.TeleBot(BOT_TOKEN)
 client = Client()
 
 def get_processed_links():
-    if not os.path.exists(DB_FILE):
-        return []
-    with open(DB_FILE, "r") as f:
-        return f.read().splitlines()
+    if not os.path.exists(DB_FILE): return []
+    with open(DB_FILE, "r") as f: return f.read().splitlines()
 
 def save_link(link):
-    with open(DB_FILE, "a") as f:
-        f.write(link + "\n")
+    with open(DB_FILE, "a") as f: f.write(link + "\n")
 
-def rewrite_text_and_format(title, description, link):
-    prompt = f"Напиши хайповый пост для ТГ в 3 абзаца. Жирный заголовок, тематические эмодзи-стикеры. Тема: {title}. Суть: {description}. Ссылка: {link}"
+def get_full_article_text(url):
+    try:
+        response = requests.get(url, timeout=10)
+        soup = BeautifulSoup(response.content, 'html.parser')
+        paragraphs = soup.find_all('p')
+        full_text = " ".join([p.get_text() for p in paragraphs])
+        return full_text[:3500]
+    except:
+        return None
+
+def rewrite_text_and_format(title, raw_body, link):
+    prompt = f"""
+    Write a news post for Telegram.
+    Title: {title}
+    Source text: {raw_body}
+    
+    Rules:
+    1. Exactly 3 distinct paragraphs. Complete the story fully.
+    2. First paragraph must be BOLD (⚡️ CATCHY HEADLINE).
+    3. Use thematic emojis and stickers.
+    4. Do not mention the original source website name.
+    5. No cut-off sentences.
+    6. Language: Russian.
+    
+    End with: [Читать полностью]({link})
+    """
     try:
         response = client.chat.completions.create(
             model="gpt-3.5-turbo",
@@ -31,51 +53,42 @@ def rewrite_text_and_format(title, description, link):
         )
         return response.choices[0].message.content
     except:
-        return f"🔥 **{title}**\n\n{description}\n\n[Читать полностью]({link})"
+        return f"**{title}**\n\nНовость уже в канале! Подробности по ссылке ниже.\n\n[Читать]({link})"
 
 def fetch_news():
-    print("Проверка новостей...")
-    # Широкий поиск по ключевым темам
-    query = "политика OR музыка OR блогеры OR США OR медиа"
-    url = f"https://newsapi.org/v2/everything?q={query}&language=ru&sortBy=publishedAt&pageSize=20&apiKey={NEWS_API_KEY}"
-
+    query = "politics OR music OR influencers OR USA OR hollywood"
+    url = f"https://newsapi.org/v2/everything?q={query}&language=ru&sortBy=publishedAt&pageSize=15&apiKey={NEWS_API_KEY}"
+    
     try:
-        r = requests.get(url)
-        data = r.json()
-        articles = data.get("articles", [])
-        print(f"Найдено свежих статей: {len(articles)}")
-    except Exception as e:
-        print(f"Ошибка API: {e}")
-        return
+        articles = requests.get(url).json().get("articles", [])
+    except: return
 
     processed = get_processed_links()
-    posted_count = 0
+    posted = 0
     
     for article in articles:
-        if posted_count >= 2: break
-        
+        if posted >= 2: break
         link = article["url"]
+        
         if link not in processed:
-            print(f"Новая новость: {article['title']}")
             title = article["title"]
-            desc = article["description"] or "Подробности в источнике."
-            img = article.get("urlToImage")
+            full_content = get_full_article_text(link)
+            content_to_use = full_content if full_content and len(full_content) > 400 else article["description"]
             
-            content = rewrite_text_and_format(title, desc, link)
+            final_post = rewrite_text_and_format(title, content_to_use, link)
+            img = article.get("urlToImage")
             
             try:
                 if img and img.startswith("http"):
-                    bot.send_photo(CHANNEL_ID, img, caption=content, parse_mode='Markdown')
+                    bot.send_photo(CHANNEL_ID, img, caption=final_post, parse_mode='Markdown')
                 else:
-                    bot.send_message(CHANNEL_ID, content, parse_mode='Markdown')
+                    bot.send_message(CHANNEL_ID, final_post, parse_mode='Markdown')
+                
                 save_link(link)
-                posted_count += 1
-                print("Успешно отправлено!")
-                time.sleep(5)
-            except Exception as e:
-                print(f"Ошибка ТГ: {e}")
-        else:
-            print("Эта новость уже была.")
+                posted += 1
+                time.sleep(10)
+            except:
+                continue
 
 if __name__ == "__main__":
     fetch_news()

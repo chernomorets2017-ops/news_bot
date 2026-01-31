@@ -1,8 +1,6 @@
 import os
 import telebot
 import requests
-import g4f
-from g4f.client import Client
 from bs4 import BeautifulSoup
 import time
 
@@ -12,7 +10,6 @@ NEWS_API_KEY = "E16b35592a2147989d80d46457d4f916"
 DB_FILE = "last_links.txt"
 
 bot = telebot.TeleBot(BOT_TOKEN)
-client = Client()
 
 def get_processed_links():
     if not os.path.exists(DB_FILE): return []
@@ -21,72 +18,63 @@ def get_processed_links():
 def save_link(link):
     with open(DB_FILE, "a") as f: f.write(link + "\n")
 
-def get_article_content(url):
-    try:
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-        }
-        r = requests.get(url, headers=headers, timeout=15)
-        soup = BeautifulSoup(r.content, 'html.parser')
-        for s in soup(['script', 'style', 'header', 'footer', 'nav', 'aside', 'form']): s.decompose()
-        paragraphs = soup.find_all('p')
-        text = ' '.join([p.get_text() for p in paragraphs])
-        return text[:4000] if len(text) > 300 else None
-    except:
-        return None
+def format_text(title, description, link):
+    emoji = "⚡️"
+    tags = {
+        "apple": "🍏", "iphone": "📱", "сша": "🇺🇸", "трамп": "🇺🇸", 
+        "музыка": "🎸", "певец": "🎤", "блогер": "📸", "tiktok": "🎬",
+        "кино": "🍿", "голливуд": "🌟", "политика": "🏛"
+    }
+    
+    for word, icon in tags.items():
+        if word in title.lower() or word in description.lower():
+            emoji = icon
+            break
 
-def make_post(title, body, link):
-    prompt = f"Напиши пост для ТГ на русском. 3 абзаца, жирный заголовок. Вставляй очень много тематических эмодзи в каждое предложение. Тема: {title}. Текст: {body}. Ссылка: {link}"
-    try:
-        response = client.chat.completions.create(
-            model="gpt-4o",
-            messages=[{"role": "user", "content": prompt}]
-        )
-        return response.choices[0].message.content
-    except:
-        return None
+    text = f"{emoji} **{title.upper()}**\n\n"
+    clean_desc = description.split("...")[0].split("…")[0]
+    
+    text += f"{clean_desc}\n\n"
+    text += f"🔥 _Следите за подробностями в нашем канале!_\n\n"
+    text += f"[Читать полностью]({link})"
+    
+    return text
 
 def run():
-    urls = [
-        f"https://newsapi.org/v2/top-headlines?country=us&apiKey={NEWS_API_KEY}",
-        f"https://newsapi.org/v2/everything?q=politics OR music OR bloggers&language=ru&sortBy=publishedAt&apiKey={NEWS_API_KEY}"
-    ]
+    url = f"https://newsapi.org/v2/everything?q=politics OR music OR bloggers&language=ru&sortBy=publishedAt&pageSize=10&apiKey={NEWS_API_KEY}"
     
-    db = get_processed_links()
-    posted = 0
+    try:
+        r = requests.get(url, timeout=10)
+        articles = r.json().get("articles", [])
+        db = get_processed_links()
+        posted = 0
 
-    for url in urls:
-        if posted >= 2: break
-        try:
-            r = requests.get(url, timeout=10)
-            articles = r.json().get("articles", [])
+        for a in articles:
+            if posted >= 2: break
+            l = a["url"]
             
-            for a in articles:
-                if posted >= 2: break
-                l = a["url"]
-                if l not in db:
-                    full_text = get_article_content(l)
-                    source = full_text if full_text else a.get("description", "")
-                    
-                    if not source or len(source) < 100: continue
-                    
-                    post = make_post(a["title"], source, l)
-                    if not post: continue
+            if l not in db:
+                title = a.get("title", "")
+                desc = a.get("description", "")
+                
+                if not desc or len(desc) < 40: continue
+                
+                post_content = format_text(title, desc, l)
+                img = a.get("urlToImage")
 
-                    img = a.get("urlToImage")
-                    try:
-                        if img and img.startswith("http"):
-                            bot.send_photo(CHANNEL_ID, img, caption=post[:1024], parse_mode='Markdown')
-                        else:
-                            bot.send_message(CHANNEL_ID, post, parse_mode='Markdown', disable_web_page_preview=True)
-                        
-                        save_link(l)
-                        posted += 1
-                        time.sleep(15)
-                    except:
-                        continue
-        except:
-            continue
+                try:
+                    if img and img.startswith("http"):
+                        bot.send_photo(CHANNEL_ID, img, caption=post_content, parse_mode='Markdown')
+                    else:
+                        bot.send_message(CHANNEL_ID, post_content, parse_mode='Markdown', disable_web_page_preview=True)
+                    
+                    save_link(l)
+                    posted += 1
+                    time.sleep(5)
+                except:
+                    continue
+    except:
+        pass
 
 if __name__ == "__main__":
     run()

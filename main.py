@@ -23,32 +23,30 @@ def save_link(link):
 
 def get_article_content(url):
     try:
-        headers = {'User-Agent': 'Mozilla/5.0'}
-        r = requests.get(url, headers=headers, timeout=10)
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        }
+        r = requests.get(url, headers=headers, timeout=15)
         soup = BeautifulSoup(r.content, 'html.parser')
-        for s in soup(['script', 'style', 'header', 'footer', 'nav', 'aside']): s.decompose()
-        text = ' '.join([p.get_text() for p in soup.find_all('p')])
+        for s in soup(['script', 'style', 'header', 'footer', 'nav', 'aside', 'form']): s.decompose()
+        paragraphs = soup.find_all('p')
+        text = ' '.join([p.get_text() for p in paragraphs])
         return text[:4000] if len(text) > 300 else None
-    except Exception as e:
-        print(f"Scraper error: {e}")
+    except:
         return None
 
 def make_post(title, body, link):
-    prompt = f"Напиши пост для ТГ на русском. 3 абзаца, жирный заголовок, много эмодзи. Тема: {title}. Текст: {body}. Ссылка: {link}"
+    prompt = f"Напиши пост для ТГ на русском. 3 абзаца, жирный заголовок. Вставляй очень много тематических эмодзи в каждое предложение. Тема: {title}. Текст: {body}. Ссылка: {link}"
     try:
         response = client.chat.completions.create(
             model="gpt-4o",
-            messages=[{"role": "user", "content": prompt}],
-            provider=g4f.Provider.ChatGptEs # Используем стабильный провайдер
+            messages=[{"role": "user", "content": prompt}]
         )
         return response.choices[0].message.content
-    except Exception as e:
-        print(f"AI error: {e}")
+    except:
         return None
 
 def run():
-    print("Starting news fetch...")
-    # Ищем и по России, и по США для максимального охвата
     urls = [
         f"https://newsapi.org/v2/top-headlines?country=us&apiKey={NEWS_API_KEY}",
         f"https://newsapi.org/v2/everything?q=politics OR music OR bloggers&language=ru&sortBy=publishedAt&apiKey={NEWS_API_KEY}"
@@ -60,36 +58,35 @@ def run():
     for url in urls:
         if posted >= 2: break
         try:
-            articles = requests.get(url).json().get("articles", [])
-            print(f"Found {len(articles)} articles in source")
+            r = requests.get(url, timeout=10)
+            articles = r.json().get("articles", [])
             
             for a in articles:
                 if posted >= 2: break
                 l = a["url"]
                 if l not in db:
-                    print(f"Analyzing: {a['title']}")
                     full_text = get_article_content(l)
                     source = full_text if full_text else a.get("description", "")
                     
-                    if not source or len(source) < 150:
-                        print("Content too short, skipping...")
-                        continue
+                    if not source or len(source) < 100: continue
                     
                     post = make_post(a["title"], source, l)
                     if not post: continue
 
                     img = a.get("urlToImage")
-                    if img and img.startswith("http"):
-                        bot.send_photo(CHANNEL_ID, img, caption=post[:1024], parse_mode='Markdown')
-                    else:
-                        bot.send_message(CHANNEL_ID, post, parse_mode='Markdown', disable_web_page_preview=True)
-                    
-                    save_link(l)
-                    posted += 1
-                    print("SUCCESS: Posted to Telegram")
-                    time.sleep(15)
-        except Exception as e:
-            print(f"Loop error: {e}")
+                    try:
+                        if img and img.startswith("http"):
+                            bot.send_photo(CHANNEL_ID, img, caption=post[:1024], parse_mode='Markdown')
+                        else:
+                            bot.send_message(CHANNEL_ID, post, parse_mode='Markdown', disable_web_page_preview=True)
+                        
+                        save_link(l)
+                        posted += 1
+                        time.sleep(15)
+                    except:
+                        continue
+        except:
+            continue
 
 if __name__ == "__main__":
     run()

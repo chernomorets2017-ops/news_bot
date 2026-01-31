@@ -1,7 +1,6 @@
 import os
 import telebot
 import requests
-import g4f
 from bs4 import BeautifulSoup
 import time
 
@@ -21,48 +20,45 @@ def save_link(link):
 
 def get_full_text(url):
     try:
-        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+        headers = {'User-Agent': 'Mozilla/5.0'}
         r = requests.get(url, headers=headers, timeout=10)
         soup = BeautifulSoup(r.content, 'html.parser')
         for s in soup(['script', 'style', 'header', 'footer', 'nav', 'aside']): s.decompose()
-        paragraphs = soup.find_all('p')
-        text = ' '.join([p.get_text() for p in paragraphs if len(p.get_text()) > 50])
-        return text[:2000]
+        paragraphs = [p.get_text().strip() for p in soup.find_all('p') if len(p.get_text()) > 50]
+        return " ".join(paragraphs[:10])[:1500]
     except:
         return None
 
-def smart_trim(text, limit):
-    if len(text) <= limit: return text
-    trimmed = text[:limit]
-    last_dot = trimmed.rfind('.')
-    if last_dot != -1:
-        return trimmed[:last_dot + 1]
-    return trimmed
-
-def ai_rewrite(title, text):
-    try:
-        prompt = f"Перескажи новость как автор ТГ-блога СВОИМИ СЛОВАМИ. Тема: {title}. Текст: {text}. Правила: 3 абзаца, первый жирным, много эмодзи, БЕЗ ССЫЛОК, мысль должна быть закончена."
-        response = g4f.ChatCompletion.create(
-            model="gpt-4o",
-            messages=[{"role": "user", "content": prompt}],
-            timeout=25
-        )
-        return response
-    except:
-        return None
-
-def format_fallback(title, text):
+def format_post(title, full_text):
     emoji = "⚡️"
-    tags = {"apple": "🍏", "сша": "🇺🇸", "трамп": "🇺🇸", "музыка": "🎸", "кино": "🍿", "политика": "🏛"}
+    tags = {
+        "apple": "🍏", "сша": "🇺🇸", "трамп": "🇺🇸", "байден": "🇺🇸",
+        "музыка": "🎸", "певец": "🎤", "блогер": "📸", "tiktok": "🎬",
+        "кино": "🍿", "голливуд": "🌟", "политика": "🏛"
+    }
     for word, icon in tags.items():
         if word in title.lower():
             emoji = icon
             break
-    clean_text = smart_trim(text, 800)
-    return f"{emoji} **{title.upper()}**\n\n{clean_text}"
+
+    post = f"{emoji} **{title.upper()}**\n\n"
+    
+    if full_text:
+        sentences = [s.strip() for s in full_text.split('.') if len(s.strip()) > 5]
+        if len(sentences) > 2:
+            chunk = len(sentences) // 3
+            p1 = ". ".join(sentences[:max(1, chunk)]) + "."
+            p2 = ". ".join(sentences[max(1, chunk):max(2, chunk*2)]) + "."
+            p3 = ". ".join(sentences[max(2, chunk*2):]) + "."
+            post += f"{p1}\n\n{p2}\n\n{p3}"
+        else:
+            post += full_text
+            
+    footer = "\n\n[📟 .sup.news](https://t.me/SUP_V_BotK)"
+    return post[:(1024 - len(footer))] + footer
 
 def run():
-    url = f"https://newsapi.org/v2/everything?q=(politics OR music OR bloggers OR USA OR hollywood)&language=ru&sortBy=publishedAt&pageSize=10&apiKey={NEWS_API_KEY}"
+    url = f"https://newsapi.org/v2/everything?q=politics OR music OR bloggers OR USA OR hollywood&language=ru&sortBy=publishedAt&pageSize=10&apiKey={NEWS_API_KEY}"
     try:
         r = requests.get(url, timeout=10)
         articles = r.json().get("articles", [])
@@ -73,17 +69,12 @@ def run():
             l = a["url"]
             if l not in db:
                 title = a.get("title", "")
-                raw_content = get_full_text(l) or a.get("description", "")
-                if not raw_content or len(raw_content) < 150: continue
-                
-                final_post = ai_rewrite(title, raw_content)
-                if not final_post:
-                    final_post = format_fallback(title, raw_content)
-                
-                footer = "\n\n[📟 .sup.news](https://t.me/SUP_V_BotK)"
-                limit = 1010 - len(footer)
-                final_post = smart_trim(final_post, limit) + footer
-                
+                content = get_full_text(l)
+                if not content or len(content) < 200:
+                    content = a.get("description", "")
+                if not content or "…" in content: continue
+
+                final_post = format_post(title, content)
                 img = a.get("urlToImage")
                 try:
                     if img and img.startswith("http"):
@@ -92,7 +83,7 @@ def run():
                         bot.send_message(CHANNEL_ID, final_post, parse_mode='Markdown', disable_web_page_preview=True)
                     save_link(l)
                     posted += 1
-                    time.sleep(15)
+                    time.sleep(5)
                 except: continue
     except: pass
 

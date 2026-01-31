@@ -36,31 +36,40 @@ def get_full_article(url):
 
 def rewrite_text(title, content):
     prompt = (
-        f"СТРОГОЕ ПРАВИЛО: Выдай только текст поста для Telegram. Не здоровайся, не комментируй, не пиши 'Вот текст'.\n\n"
-        f"ДАННЫЕ:\n"
+        f"SYSTEM: Ты — робот-обработчик. Выдавай ТОЛЬКО чистый текст для поста. Любые пояснения, вежливость и фразы 'Вот текст' КАТЕГОРИЧЕСКИ ЗАПРЕЩЕНЫ. Сразу начинай с 🔥.\n\n"
+        f"НОВОСТЬ:\n"
         f"Заголовок: {title}\n"
-        f"Текст: {content[:1500]}\n\n"
+        f"Контент: {content[:1500]}\n\n"
         f"СТРУКТУРА:\n"
-        f"1. 🔥 **Жирный заголовок**\n"
-        f"2. Суть новости (1-2 предложения).\n"
-        f"3. Факты через •\n"
-        f"4. Итог: что это значит.\n"
-        f"5. 2-3 хештега."
+        f"🔥 **[Жирный заголовок]**\n\n"
+        f"[Суть в 2 предложениях]\n\n"
+        f"• [Факт 1]\n"
+        f"• [Факт 2]\n\n"
+        f"💡 [Совет или итог]\n\n"
+        f"#теги"
     )
     try:
         with DDGS() as ddgs:
             response = ddgs.chat(prompt, model='gpt-4o-mini')
-            text = response.strip().strip('"')
-            text = re.sub(r'^(Вот|Ваш|Редактор|Конечно|Держите|Текст|Пересказ|Пост).*:(\s+)?', '', text, flags=re.IGNORECASE).strip()
-            last_mark = max(text.rfind('.'), text.rfind('!'), text.rfind('?'), text.rfind('#'))
-            if last_mark != -1 and len(text) > last_mark + 5:
-                text = text[:last_mark + 1]
+            text = response.strip()
+            
+            # Удаляем всё, что идет до первого эмодзи или жирного шрифта (отрезаем приветствия)
+            start_index = text.find('🔥')
+            if start_index != -1:
+                text = text[start_index:]
+            
+            # Удаляем фразы-паразиты, если они остались
+            text = re.sub(r'^(Вот|Текст|Ваш|Конечно|Пост|Редактор).*?[:\n]', '', text, flags=re.IGNORECASE | re.DOTALL).strip()
+            
+            # Чистим Markdown-мусор
+            text = text.replace('```', '').strip()
+            
             return text
     except:
         return f"🔥 <b>{title}</b>\n\n{content[:300]}..."
 
 def run():
-    url = f"https://newsapi.org/v2/everything?q=(IT OR технологии OR нейросети)&language=ru&sortBy=publishedAt&apiKey={NEWS_API_KEY}"
+    url = f"[https://newsapi.org/v2/everything?q=(IT](https://newsapi.org/v2/everything?q=(IT) OR технологии OR нейросети)&language=ru&sortBy=publishedAt&apiKey={NEWS_API_KEY}"
     try:
         response = requests.get(url)
         articles = response.json().get('articles', [])
@@ -81,9 +90,9 @@ def run():
         if not content: continue
 
         final_post = rewrite_text(title, content)
-        if len(final_post) < 150: continue
+        if len(final_post) < 100: continue
 
-        caption = f"{final_post}\n\n🗞 <b>Подпишись на <a href='https://t.me/SUP_V_BotK'>SUP_V_BotK</a></b>"
+        caption = f"{final_post}\n\n🗞 <b>Подпишись на <a href='[https://t.me/SUP_V_BotK](https://t.me/SUP_V_BotK)'>SUP_V_BotK</a></b>"
         
         try:
             if art.get('urlToImage'):

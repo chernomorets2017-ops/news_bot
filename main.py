@@ -1,6 +1,8 @@
 import os
 import telebot
 import requests
+import g4f
+from g4f.client import Client
 from bs4 import BeautifulSoup
 import time
 
@@ -10,6 +12,7 @@ NEWS_API_KEY = "E16b35592a2147989d80d46457d4f916"
 DB_FILE = "last_links.txt"
 
 bot = telebot.TeleBot(BOT_TOKEN)
+client = Client()
 
 def get_processed_links():
     if not os.path.exists(DB_FILE): return []
@@ -20,81 +23,73 @@ def save_link(link):
 
 def get_full_text(url):
     try:
-        headers = {'User-Agent': 'Mozilla/5.0'}
-        r = requests.get(url, headers=headers, timeout=10)
+        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+        r = requests.get(url, headers=headers, timeout=12)
         soup = BeautifulSoup(r.content, 'html.parser')
         for s in soup(['script', 'style', 'header', 'footer', 'nav', 'aside']): s.decompose()
-        paragraphs = soup.find_all('p')
-        text = ' '.join([p.get_text() for p in paragraphs if len(p.get_text()) > 50])
-        return text[:1200]
+        text = ' '.join([p.get_text() for p in soup.find_all('p') if len(p.get_text()) > 40])
+        return text[:4000]
     except:
         return None
 
-def format_post(title, full_text):
-    emoji = "⚡️"
-    tags = {
-        "apple": "🍏", "iphone": "📱", "сша": "🇺🇸", "трамп": "🇺🇸", "байден": "🇺🇸",
-        "музыка": "🎸", "певец": "🎤", "рэп": "🎧", "блогер": "📸", "tiktok": "🎬",
-        "кино": "🍿", "голливуд": "🌟", "политика": "🏛", "интервью": "🎙"
-    }
+def ai_summarize(title, body):
+    prompt = f"""
+    Ты — автор дерзкого новостного блога. Перескажи эту новость СВОИМИ СЛОВАМИ.
     
-    for word, icon in tags.items():
-        if word in title.lower():
-            emoji = icon
-            break
-
-    post = f"{emoji} **{title.upper()}**\n\n"
+    ТЕМА: {title}
+    ТЕКСТ: {body}
     
-    if full_text:
-        sentences = full_text.split('. ')
-        if len(sentences) > 4:
-            p1 = '. '.join(sentences[:2]) + '.'
-            p2 = '. '.join(sentences[2:5]) + '.'
-            p3 = '. '.join(sentences[5:8]) + '.'
-            post += f"{p1}\n\n{p2}\n\n{p3}"
-        else:
-            post += full_text
-    
-    return post
+    ЗАДАЧА:
+    1. Сделай 3 коротких, емких абзаца.
+    2. Первый абзац выдели ЖИРНЫМ (это заголовок-молния).
+    3. Добавь тематические эмодзи (много, по смыслу).
+    4. Стиль: живой, молодежный, как пост в Telegram.
+    5. Весь текст должен быть законченным, без обрывов.
+    6. НЕ ставь ссылку на источник.
+    """
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[{"role": "user", "content": prompt}]
+        )
+        return response.choices[0].message.content
+    except:
+        return None
 
 def run():
-    url = f"https://newsapi.org/v2/everything?q=politics OR music OR bloggers OR USA OR hollywood&language=ru&sortBy=publishedAt&pageSize=10&apiKey={NEWS_API_KEY}"
-    
+    url = f"https://newsapi.org/v2/everything?q=politics OR music OR USA OR hollywood&language=ru&sortBy=publishedAt&pageSize=10&apiKey={NEWS_API_KEY}"
     try:
-        r = requests.get(url, timeout=10)
-        articles = r.json().get("articles", [])
+        articles = requests.get(url, timeout=10).json().get("articles", [])
         db = get_processed_links()
         posted = 0
 
         for a in articles:
             if posted >= 2: break
             l = a["url"]
-            
             if l not in db:
-                title = a.get("title", "")
-                content = get_full_text(l)
+                raw_text = get_full_text(l)
+                source_material = raw_text if raw_text and len(raw_text) > 300 else a.get("description", "")
                 
-                if not content or len(content) < 200:
-                    content = a.get("description", "")
-                    if "…" in content or "..." in content:
-                        continue
+                if len(source_material) < 150: continue
+                
+                summary = ai_summarize(a["title"], source_material)
+                if not summary: continue
 
-                final_post = format_post(title, content)
+                # Добавляем твою зашифрованную ссылку
+                final_post = f"{summary}\n\n[📟 .sup.news](https://t.me/SUP_V_BotK)"
                 img = a.get("urlToImage")
 
                 try:
                     if img and img.startswith("http"):
                         bot.send_photo(CHANNEL_ID, img, caption=final_post[:1024], parse_mode='Markdown')
                     else:
-                        bot.send_message(CHANNEL_ID, final_post[:4096], parse_mode='Markdown')
+                        bot.send_message(CHANNEL_ID, final_post[:4096], parse_mode='Markdown', disable_web_page_preview=True)
                     
                     save_link(l)
                     posted += 1
-                    time.sleep(5)
-                except:
-                    continue
-    except:
-        pass
+                    time.sleep(20)
+                except: continue
+    except: pass
 
 if __name__ == "__main__":
     run()

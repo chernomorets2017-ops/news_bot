@@ -1,5 +1,4 @@
 name: News AutoBot
-
 on:
   schedule:
     - cron: '0 * * * *'
@@ -9,25 +8,25 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v3
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-      - name: Setup
-        uses: actions/setup-python@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
           python-version: '3.10'
 
-      - name: Deps
-        run: pip install -r requirements.txt
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
 
-      - name: Run
+      - name: Run bot
         run: python main.py
 
-      - name: Sync
+      - name: Save history
         run: |
-          git config --global user.name "Bot"
-          git config --global user.email "bot@github.com"
+          git config --global user.name "GitHub Action"
+          git config --global user.email "action@github.com"
           git add last_links.txt
-          git commit -m "update" || exit 0
+          git commit -m "Update posted links" || exit 0
           git push
-

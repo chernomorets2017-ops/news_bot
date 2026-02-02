@@ -18,7 +18,11 @@ def get_processed_links():
     if not os.path.exists(DB_FILE): return []
     with open(DB_FILE, "r") as f: 
         lines = f.read().splitlines()
-        return lines[-100:]
+        if len(lines) > 100:
+            with open(DB_FILE, "w") as fw:
+                fw.write("\n".join(lines[-50:]))
+            return lines[-50:]
+        return lines
 
 def save_link(link):
     with open(DB_FILE, "a") as f: f.write(link + "\n")
@@ -30,8 +34,9 @@ def get_full_text(url):
         soup = BeautifulSoup(r.content, 'html.parser')
         for s in soup(['script', 'style', 'header', 'footer', 'nav', 'aside']): s.decompose()
         text = ' '.join([p.get_text() for p in soup.find_all('p') if len(p.get_text()) > 50])
-        return text[:2000]
-    except: return None
+        return text[:2500]
+    except:
+        return None
 
 def smart_trim(text, limit):
     if len(text) <= limit: return text
@@ -41,20 +46,43 @@ def smart_trim(text, limit):
 
 def ai_rewrite(title, text):
     try:
+        system_prompt = (
+            "Ты — профессиональный редактор топового новостного Telegram-канала. "
+            "Твой стиль: лаконичный, дерзкий, информативный. "
+            "Используй только проверенные факты из текста."
+        )
+        user_prompt = (
+            f"Сделай качественный пересказ новости на основе этого текста: {text}\n\n"
+            f"ЗАДАНИЕ:\n"
+            f"1. Напиши яркий заголовок заглавными буквами и выдели его жирным (в начале поставь подходящий эмодзи).\n"
+            f"2. Основной текст раздели ровно на 2 абзаца. Первый абзац — суть события, второй — контекст или последствия.\n"
+            f"3. Используй живой язык, избегай канцеляризмов. Добавь 2-3 тематических эмодзи.\n"
+            f"4. СТРОГОЕ ПРАВИЛО: Закончи текст полной мыслью на точке. Не обрывай на полуслове.\n"
+            f"5. Текст должен быть авторским пересказом, а не копипастом."
+        )
         response = client.chat.completions.create(
             model="deepseek-chat",
             messages=[
-                {"role": "system", "content": "Ты редактор. Пиши кратко, до 300 символов. Никакой политики."},
-                {"role": "user", "content": f"Сделай микро-пересказ новости (макс 300 знаков). Заголовок жирным. Тема: {title}\nТекст: {text}"}
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
             ],
-            max_tokens=400,
-            temperature=0.6
+            max_tokens=800,
+            temperature=0.7,
+            timeout=45
         )
         return response.choices[0].message.content
-    except: return None
+    except:
+        return None
+
+def format_fallback(title, text):
+    header = f"⚡️ **{title.upper()}**\n\n"
+    sentences = [s.strip() for s in text.split('. ') if len(s) > 10]
+    mid = len(sentences) // 2
+    body = '. '.join(sentences[:mid]) + '.\n\n' + '. '.join(sentences[mid:]) + '.'
+    return header + body
 
 def run():
-    url = f"https://newsapi.org/v2/everything?q=(music OR bloggers OR hollywood OR gadgets OR apple)&language=ru&sortBy=publishedAt&pageSize=30&apiKey={NEWS_API_KEY}"
+    url = f"https://newsapi.org/v2/everything?q=(music OR bloggers OR USA OR hollywood)&language=ru&sortBy=publishedAt&pageSize=15&apiKey={NEWS_API_KEY}"
     try:
         r = requests.get(url, timeout=10)
         articles = r.json().get("articles", [])
@@ -63,15 +91,15 @@ def run():
         for a in articles:
             if posted >= 2: break
             l = a["url"]
-            if l not in db and not any(w in a.get("title", "").lower() for w in ['топ', 'список', 'подборка']):
-                raw = get_full_text(l)
-                if not raw or len(raw) < 250: continue
-                txt = ai_rewrite(a.get("title", ""), raw)
-                if not txt: continue
-                
+            title = a.get("title", "")
+            if l not in db and not any(w in title.lower() for w in ['топ', 'список', 'подборка', 'лучших']):
+                raw_content = get_full_text(l)
+                if not raw_content or len(raw_content) < 300: continue
+                final_text = ai_rewrite(title, raw_content)
+                if not final_text:
+                    final_text = format_fallback(title, raw_content)
                 footer = "\n\n[📟 .sup.news](https://t.me/SUP_V_BotK)"
-                final_text = smart_trim(txt, 1000 - len(footer)) + footer
-                
+                final_text = smart_trim(final_text, 1015 - len(footer)) + footer
                 img = a.get("urlToImage")
                 try:
                     if img and img.startswith("http"):
@@ -80,7 +108,7 @@ def run():
                         bot.send_message(CHANNEL_ID, final_text, parse_mode='Markdown', disable_web_page_preview=True)
                     save_link(l)
                     posted += 1
-                    time.sleep(10)
+                    time.sleep(15)
                 except: continue
     except: pass
 

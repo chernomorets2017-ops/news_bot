@@ -22,3 +22,4 @@ https://pikabu.ru/story/prodolzhenie_posta_nachalis_avariynyie_otklyucheniya_sve
 https://itc.ua/news/pervyj-vzglyad-na-chetyre-fylma-o-the-beatles-foto-akterov-v-rolyah-lennona-makkartny-harrysona-y-starra/
 https://www.f1news.ru/news/autosport-186903.html
 https://life.ru/p/1836566
+https://pypi.org/project/zvuk-music/0.1.1/

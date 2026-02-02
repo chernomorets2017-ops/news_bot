@@ -25,32 +25,31 @@ def save_link(link):
 
 def get_full_text(url):
     try:
-        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+        headers = {'User-Agent': 'Mozilla/5.0'}
         r = requests.get(url, headers=headers, timeout=12)
         soup = BeautifulSoup(r.content, 'html.parser')
         for s in soup(['script', 'style', 'header', 'footer', 'nav', 'aside']): s.decompose()
         text = ' '.join([p.get_text() for p in soup.find_all('p') if len(p.get_text()) > 50])
         return text[:2000]
-    except:
-        return None
+    except: return None
 
 def ai_rewrite(title, text):
     try:
         response = client.chat.completions.create(
             model="deepseek-chat",
             messages=[
-                {"role": "system", "content": "Ты редактор. Пиши кратко, до 300 символов. Никакой политики."},
-                {"role": "user", "content": f"Сделай микро-пересказ новости (до 300 знаков). Заголовок выдели жирным. Тема: {title}\nТекст: {text}"}
+                {"role": "system", "content": "Ты редактор. Пиши кратко, строго до 300 символов. Никакой политики."},
+                {"role": "user", "content": f"Перескажи новость (макс 300 знаков). Заголовок жирным. Тема: {title}\nТекст: {text}"}
             ],
-            max_tokens=350,
-            temperature=0.6
+            max_tokens=400,
+            temperature=0.5
         )
         return response.choices[0].message.content
-    except:
-        return None
+    except: return None
 
 def run():
-    url = f"https://newsapi.org/v2/everything?q=(music OR bloggers OR hollywood OR gadgets OR apple)&language=ru&sortBy=publishedAt&pageSize=15&apiKey={NEWS_API_KEY}"
+    # Увеличил pageSize до 30, чтобы было из чего выбирать без политики
+    url = f"https://newsapi.org/v2/everything?q=(music OR bloggers OR hollywood OR gadgets OR apple)&language=ru&sortBy=publishedAt&pageSize=30&apiKey={NEWS_API_KEY}"
     try:
         r = requests.get(url, timeout=10)
         articles = r.json().get("articles", [])
@@ -59,14 +58,15 @@ def run():
         for a in articles:
             if posted >= 2: break
             l = a["url"]
-            if l not in db and not any(w in a.get("title", "").lower() for w in ['топ', 'список', 'подборка']):
-                raw_content = get_full_text(l)
-                if not raw_content or len(raw_content) < 250: continue
-                final_text = ai_rewrite(a.get("title", ""), raw_content)
-                if not final_text: continue
+            if l not in db:
+                raw = get_full_text(l)
+                if not raw or len(raw) < 200: continue
+                txt = ai_rewrite(a.get("title", ""), raw)
+                if not txt: continue
                 
                 footer = "\n\n[📟 .sup.news](https://t.me/SUP_V_BotK)"
-                final_text = final_text[:1000-len(footer)] + footer
+                # Жесткая обрезка для гарантии отправки
+                final_text = txt[:700] + footer 
                 
                 img = a.get("urlToImage")
                 try:
@@ -76,7 +76,7 @@ def run():
                         bot.send_message(CHANNEL_ID, final_text, parse_mode='Markdown', disable_web_page_preview=True)
                     save_link(l)
                     posted += 1
-                    time.sleep(15)
+                    time.sleep(10)
                 except: continue
     except: pass
 

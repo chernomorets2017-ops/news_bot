@@ -1,3 +1,10 @@
+import os
+import telebot
+import requests
+from bs4 import BeautifulSoup
+import time
+from openai import OpenAI
+
 BOT_TOKEN = "8546746980:AAF3z5K85WaBMC-SKTSTN5Tx_dXxXyZXIoQ"
 CHANNEL_ID = "@SUP_V_BotK"
 NEWS_API_KEY = "E16b35592a2147989d80d46457d4f916"

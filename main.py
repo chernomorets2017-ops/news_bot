@@ -25,7 +25,7 @@ def save_link(link):
 
 def get_full_text(url):
     try:
-        headers = {'User-Agent': 'Mozilla/5.0'}
+        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
         r = requests.get(url, headers=headers, timeout=12)
         soup = BeautifulSoup(r.content, 'html.parser')
         for s in soup(['script', 'style', 'header', 'footer', 'nav', 'aside']): s.decompose()
@@ -33,22 +33,27 @@ def get_full_text(url):
         return text[:2000]
     except: return None
 
+def smart_trim(text, limit):
+    if len(text) <= limit: return text
+    trimmed = text[:limit]
+    last_dot = trimmed.rfind('.')
+    return trimmed[:last_dot + 1] if last_dot != -1 else trimmed
+
 def ai_rewrite(title, text):
     try:
         response = client.chat.completions.create(
             model="deepseek-chat",
             messages=[
-                {"role": "system", "content": "Ты редактор. Пиши кратко, строго до 300 символов. Никакой политики."},
-                {"role": "user", "content": f"Перескажи новость (макс 300 знаков). Заголовок жирным. Тема: {title}\nТекст: {text}"}
+                {"role": "system", "content": "Ты редактор. Пиши кратко, до 300 символов. Никакой политики."},
+                {"role": "user", "content": f"Сделай микро-пересказ новости (макс 300 знаков). Заголовок жирным. Тема: {title}\nТекст: {text}"}
             ],
             max_tokens=400,
-            temperature=0.5
+            temperature=0.6
         )
         return response.choices[0].message.content
     except: return None
 
 def run():
-    # Увеличил pageSize до 30, чтобы было из чего выбирать без политики
     url = f"https://newsapi.org/v2/everything?q=(music OR bloggers OR hollywood OR gadgets OR apple)&language=ru&sortBy=publishedAt&pageSize=30&apiKey={NEWS_API_KEY}"
     try:
         r = requests.get(url, timeout=10)
@@ -58,15 +63,14 @@ def run():
         for a in articles:
             if posted >= 2: break
             l = a["url"]
-            if l not in db:
+            if l not in db and not any(w in a.get("title", "").lower() for w in ['топ', 'список', 'подборка']):
                 raw = get_full_text(l)
-                if not raw or len(raw) < 200: continue
+                if not raw or len(raw) < 250: continue
                 txt = ai_rewrite(a.get("title", ""), raw)
                 if not txt: continue
                 
                 footer = "\n\n[📟 .sup.news](https://t.me/SUP_V_BotK)"
-                # Жесткая обрезка для гарантии отправки
-                final_text = txt[:700] + footer 
+                final_text = smart_trim(txt, 1000 - len(footer)) + footer
                 
                 img = a.get("urlToImage")
                 try:

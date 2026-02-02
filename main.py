@@ -1,10 +1,3 @@
-import os
-import telebot
-import requests
-from bs4 import BeautifulSoup
-import time
-from openai import OpenAI
-
 BOT_TOKEN = "8546746980:AAF3z5K85WaBMC-SKTSTN5Tx_dXxXyZXIoQ"
 CHANNEL_ID = "@SUP_V_BotK"
 NEWS_API_KEY = "E16b35592a2147989d80d46457d4f916"
@@ -34,7 +27,7 @@ def get_full_text(url):
         soup = BeautifulSoup(r.content, 'html.parser')
         for s in soup(['script', 'style', 'header', 'footer', 'nav', 'aside']): s.decompose()
         text = ' '.join([p.get_text() for p in soup.find_all('p') if len(p.get_text()) > 50])
-        return text[:2500]
+        return text[:500]
     except:
         return None
 
@@ -82,7 +75,7 @@ def format_fallback(title, text):
     return header + body
 
 def run():
-    url = f"https://newsapi.org/v2/everything?q=(politics OR music OR bloggers OR USA OR hollywood)&language=ru&sortBy=publishedAt&pageSize=15&apiKey={NEWS_API_KEY}"
+    url = f"https://newsapi.org/v2/everything?q=(music OR bloggers OR USA OR hollywood)&language=ru&sortBy=publishedAt&pageSize=15&apiKey={NEWS_API_KEY}"
     try:
         r = requests.get(url, timeout=10)
         articles = r.json().get("articles", [])

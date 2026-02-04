@@ -17,26 +17,20 @@ client = OpenAI(api_key=DEEPSEEK_API_KEY, base_url="https://api.deepseek.com")
 def get_processed_links():
     if not os.path.exists(DB_FILE): return []
     with open(DB_FILE, "r") as f: 
-        lines = f.read().splitlines()
-        if len(lines) > 100:
-            with open(DB_FILE, "w") as fw:
-                fw.write("\n".join(lines[-50:]))
-            return lines[-50:]
-        return lines
+        return f.read().splitlines()[-150:]
 
 def save_link(link):
     with open(DB_FILE, "a") as f: f.write(link + "\n")
 
 def get_full_text(url):
     try:
-        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+        headers = {'User-Agent': 'Mozilla/5.0'}
         r = requests.get(url, headers=headers, timeout=12)
         soup = BeautifulSoup(r.content, 'html.parser')
         for s in soup(['script', 'style', 'header', 'footer', 'nav', 'aside']): s.decompose()
-        text = ' '.join([p.get_text() for p in soup.find_all('p') if len(p.get_text()) > 50])
+        text = ' '.join([p.get_text() for p in soup.find_all('p') if len(p.get_text()) > 40])
         return text[:2500]
-    except:
-        return None
+    except: return None
 
 def smart_trim(text, limit):
     if len(text) <= limit: return text
@@ -46,43 +40,21 @@ def smart_trim(text, limit):
 
 def ai_rewrite(title, text):
     try:
-        system_prompt = (
-            "Ты — профессиональный редактор топового новостного Telegram-канала. "
-            "Твой стиль: лаконичный, дерзкий, информативный. "
-            "Используй только проверенные факты из текста."
-        )
-        user_prompt = (
-            f"Сделай качественный пересказ новости на основе этого текста: {text}\n\n"
-            f"ЗАДАНИЕ:\n"
-            f"1. Напиши яркий заголовок заглавными буквами и выдели его жирным (в начале поставь подходящий эмодзи).\n"
-            f"2. Основной текст раздели ровно на 2 абзаца. Первый абзац — суть события, второй — контекст или последствия.\n"
-            f"3. Используй живой язык, избегай канцеляризмов. Добавь 2-3 тематических эмодзи.\n"
-            f"4. СТРОГОЕ ПРАВИЛО: Закончи текст полной мыслью на точке. Не обрывай на полуслове.\n"
-            f"5. Текст должен быть авторским пересказом, а не копипастом."
-        )
         response = client.chat.completions.create(
             model="deepseek-chat",
             messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
+                {"role": "system", "content": "Ты редактор медиа о музыке и шоу-бизнесе. Пиши кратко (до 300 симв), хайпово, без политики."},
+                {"role": "user", "content": f"Сделай микро-пересказ (макс 300 зн). Заголовок жирным. Тема: {title}\nТекст: {text}"}
             ],
-            max_tokens=800,
-            temperature=0.7,
-            timeout=45
+            max_tokens=400,
+            temperature=0.6
         )
         return response.choices[0].message.content
-    except:
-        return None
-
-def format_fallback(title, text):
-    header = f"⚡️ **{title.upper()}**\n\n"
-    sentences = [s.strip() for s in text.split('. ') if len(s) > 10]
-    mid = len(sentences) // 2
-    body = '. '.join(sentences[:mid]) + '.\n\n' + '. '.join(sentences[mid:]) + '.'
-    return header + body
+    except: return None
 
 def run():
-    url = f"https://newsapi.org/v2/everything?q=(music OR bloggers OR USA OR hollywood)&language=ru&sortBy=publishedAt&pageSize=15&apiKey={NEWS_API_KEY}"
+    query = 'music OR "show business" OR "pop star" OR Hollywood OR "new album" OR "concert tour"'
+    url = f"https://newsapi.org/v2/everything?q={query}&language=ru&sortBy=publishedAt&pageSize=50&apiKey={NEWS_API_KEY}"
     try:
         r = requests.get(url, timeout=10)
         articles = r.json().get("articles", [])
@@ -92,14 +64,13 @@ def run():
             if posted >= 2: break
             l = a["url"]
             title = a.get("title", "")
-            if l not in db and not any(w in title.lower() for w in ['топ', 'список', 'подборка', 'лучших']):
-                raw_content = get_full_text(l)
-                if not raw_content or len(raw_content) < 300: continue
-                final_text = ai_rewrite(title, raw_content)
-                if not final_text:
-                    final_text = format_fallback(title, raw_content)
+            if l not in db:
+                raw = get_full_text(l)
+                if not raw or len(raw) < 250: continue
+                txt = ai_rewrite(title, raw)
+                if not txt: continue
                 footer = "\n\n[📟 .sup.news](https://t.me/SUP_V_BotK)"
-                final_text = smart_trim(final_text, 1015 - len(footer)) + footer
+                final_text = smart_trim(txt, 1000 - len(footer)) + footer
                 img = a.get("urlToImage")
                 try:
                     if img and img.startswith("http"):

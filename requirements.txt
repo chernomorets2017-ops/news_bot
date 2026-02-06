@@ -1,8 +1,6 @@
 python-telegram-bot==20.7
-newspaper3k
-sumy
+newspaper3k==0.2.8
 feedparser
 requests
-lxml
+lxml==4.9.3
 lxml_html_clean
-nltk

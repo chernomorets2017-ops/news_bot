@@ -4,4 +4,5 @@ sumy
 feedparser
 requests
 lxml
+lxml_html_clean
 nltk

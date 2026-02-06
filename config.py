@@ -1,8 +1,8 @@
 import os
 
-BOT_TOKEN = "8546746980:AAF3z5K85WaBMC-SKTSTN5Tx_dXxXyZXIoQ"
-CHANNEL_USERNAME = "SUP_V_BOTK"
-CHANNEL_LINK = "https://t.me/SUP_V_BOTK"
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+CHANNEL_USERNAME = os.getenv("CHANNEL_USERNAME")
+CHANNEL_LINK = os.getenv("CHANNEL_LINK")
 
 RSS_FEEDS = [
     "https://lenta.ru/rss/news",
@@ -21,4 +21,4 @@ KEYWORDS = [
 
 POSTS_PER_RUN = 1
 
-FALLBACK_IMAGE = "https://i.imgur.com/8Km9tLL.jpg" 
+FALLBACK_IMAGE = "https://i.imgur.com/8Km9tLL.jpg"

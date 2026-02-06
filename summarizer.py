@@ -1,22 +1,28 @@
 import random
-from sumy.parsers.plaintext import PlaintextParser
-from sumy.nlp.tokenizers import Tokenizer
-from sumy.summarizers.text_rank import TextRankSummarizer
+import re
 
 HOOKS = [
-    "🔥 В индустрии снова шум.",
-    "🎵 Фанаты уже обсуждают.",
-    "😱 Это обсуждают все.",
-    "👀 Кажется, нас ждёт хит."
+    "🔥 В музыкальной индустрии снова шум.",
+    "👀 Фанаты активно обсуждают эту новость.",
+    "🎵 Похоже, это станет громким событием.",
+    "😱 Новость, мимо которой не пройти."
 ]
 
-def summarize(text, max_len=500):
-    parser = PlaintextParser.from_string(text, Tokenizer("english"))
-    summarizer = TextRankSummarizer()
-    sentences = summarizer(parser.document, 4)
+def summarize(text, min_len=300, max_len=500):
 
-    summary = " ".join(str(s) for s in sentences)
-    summary = summary[:max_len].rsplit(" ", 1)[0]
+    text = re.sub(r"\s+", " ", text).strip()
+
+    sentences = re.split(r'(?<=[.!?]) +', text)
+
+    summary = ""
+    for s in sentences:
+        if len(summary) + len(s) <= max_len:
+            summary += s + " "
+        if len(summary) >= min_len:
+            break
+
+    if not summary:
+        summary = text[:max_len]
 
     hook = random.choice(HOOKS)
-    return f"{hook}\n\n{summary}…"
+    return f"{hook}\n\n{summary.strip()}…"

@@ -1,28 +1,20 @@
-import hashlib
-import json
-import os
+import hashlib, json, os
 
-FILE_PATH = "posted.json"
+FILE = "posted.json"
 
-def _load_hashes():
-    if not os.path.exists(FILE_PATH):
+def _load():
+    if not os.path.exists(FILE):
         return set()
-    with open(FILE_PATH, "r", encoding="utf-8") as f:
-        return set(json.load(f))
+    return set(json.load(open(FILE)))
 
-def _save_hashes(hashes):
-    with open(FILE_PATH, "w", encoding="utf-8") as f:
-        json.dump(list(hashes), f, ensure_ascii=False, indent=2)
+def _save(data):
+    json.dump(list(data), open(FILE, "w"), indent=2)
 
-def is_duplicate(url: str, title: str) -> bool:
-    hashes = _load_hashes()
-    raw = f"{url}{title}".encode("utf-8")
-    article_hash = hashlib.sha256(raw).hexdigest()
-    return article_hash in hashes
+def is_duplicate(url, title):
+    h = hashlib.sha256(f"{url}{title}".encode()).hexdigest()
+    return h in _load()
 
-def mark_as_posted(url: str, title: str):
-    hashes = _load_hashes()
-    raw = f"{url}{title}".encode("utf-8")
-    article_hash = hashlib.sha256(raw).hexdigest()
-    hashes.add(article_hash)
-    _save_hashes(hashes)
+def mark_posted(url, title):
+    data = _load()
+    data.add(hashlib.sha256(f"{url}{title}".encode()).hexdigest())
+    _save(data)

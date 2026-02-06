@@ -1,6 +1,7 @@
 python-telegram-bot==20.7
 newspaper3k
 sumy
-lxml
+feedparser
 requests
+lxml
 nltk

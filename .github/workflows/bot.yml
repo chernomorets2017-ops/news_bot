@@ -1,20 +1,26 @@
 name: News Bot
 
 on:
-  schedule:
-    - cron: "*/30 * * * *"
   workflow_dispatch:
+  schedule:
+    - cron: "*/10 * * * *"
 
 jobs:
-  bot:
+  run:
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v3
-      - name: Install
-        run: pip install feedparser requests beautifulsoup4
-      - name: Run
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install deps
+        run: pip install -r requirements.txt
+
+      - name: Run bot
         env:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
-          CHANNEL_USERNAME: ${{ secrets.CHANNEL_USERNAME }}
           CHANNEL_NAME: ${{ secrets.CHANNEL_NAME }}
         run: python bot.py

@@ -1,94 +1,65 @@
 import os
-import json
 import feedparser
-import random
+import hashlib
+import json
 from telegram import Bot
 
-# ===== СЕКРЕТЫ =====
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-CHANNEL_USERNAME = os.getenv("CHANNEL_USERNAME")  # @yourchannel
-CHANNEL_LINK = os.getenv("CHANNEL_LINK")          # https://t.me/yourchannel
-
-# ===== НАСТРОЙКИ =====
-RSS_FEEDS = [
-    "https://news.google.com/rss/search?q=music+celebrity+news&hl=en&gl=US&ceid=US:en",
-    "https://news.google.com/rss/search?q=show+business+news&hl=en&gl=US&ceid=US:en"
-]
-
-KEYWORDS = ["music", "album", "song", "singer", "rapper", "band", "celebrity", "concert"]
-POSTS_PER_RUN = 2
-
-IMAGES = [
-    "https://i.imgur.com/8Km9tLL.jpg",
-    "https://i.imgur.com/Z6X9Z9s.jpg",
-    "https://i.imgur.com/1c9a1aF.jpg"
-]
+CHANNEL_USERNAME = os.getenv("CHANNEL_USERNAME")
+CHANNEL_LINK = os.getenv("CHANNEL_LINK")
 
 bot = Bot(BOT_TOKEN)
 
+KEYWORDS = [
+    "music", "song", "album", "singer", "rapper", "band",
+    "concert", "tour", "festival",
+    "celebrity", "showbiz", "entertainment", "pop", "hip hop",
+    "Grammy", "Billboard", "Spotify"
+]
 
-# ===== АНТИ-ДУБЛИКАТЫ =====
-def load_posted():
-    try:
-        return set(json.load(open("posted.json")))
-    except:
-        return set()
+DB_FILE = "posted.json"
 
-def save_posted(data):
-    json.dump(list(data), open("posted.json", "w"))
+def load_db():
+    if os.path.exists(DB_FILE):
+        return json.load(open(DB_FILE))
+    return []
 
+def save_db(db):
+    json.dump(db, open(DB_FILE, "w"))
 
-# ===== ОСНОВНАЯ ЛОГИКА =====
-def run():
-    posted = load_posted()
-    sent = 0
+posted = load_db()
 
-    for feed_url in RSS_FEEDS:
-        feed = feedparser.parse(feed_url)
+feed = feedparser.parse("https://news.google.com/rss?hl=en&gl=US&ceid=US:en")
 
-        for e in feed.entries:
-            if sent >= POSTS_PER_RUN:
-                break
+for entry in feed.entries[:10]:
+    title = entry.title
+    summary = entry.get("summary", "")
+    link = entry.link
 
-            title = e.title
-            link = e.link
-            summary = e.summary if "summary" in e else ""
+    text_check = (title + summary).lower()
 
-            text_lower = (title + summary).lower()
+    # мягкий фильтр
+    if not any(k in text_check for k in KEYWORDS):
+        continue
 
-            # фильтр по теме
-            if not any(k in text_lower for k in KEYWORDS):
-                continue
+    # анти-дубликат
+    uid = hashlib.md5(link.encode()).hexdigest()
+    if uid in posted:
+        continue
 
-            # анти-дубликат
-            if link in posted:
-                continue
+    posted.append(uid)
+    save_db(posted)
 
-            # короткий пересказ
-            summary = summary.replace("<b>", "").replace("</b>", "")
-            summary = summary.replace("<a", "").replace("</a>", "")
-            summary = summary[:450]
+    # короткий пересказ (упрощенный)
+    short = summary[:400]
 
-            text = f"""<b>{title}</b>
+    message = f"""<b>{title}</b>
 
-{summary}...
+{short}...
+
+<a href="{link}">Читать полностью</a>
 
 <a href="{CHANNEL_LINK}">Подписаться на канал</a>"""
 
-            image = random.choice(IMAGES)
-
-            bot.send_photo(
-                chat_id=CHANNEL_USERNAME,
-                photo=image,
-                caption=text,
-                parse_mode="HTML"
-            )
-
-            posted.add(link)
-            sent += 1
-
-    save_posted(posted)
-
-
-if __name__ == "__main__":
-    run()
+    bot.send_message(chat_id=CHANNEL_USERNAME, text=message, parse_mode="HTML")
+    break

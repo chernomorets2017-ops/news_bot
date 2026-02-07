@@ -1,8 +1,6 @@
-name: Telegram News Bot
+name: bot
 
 on:
-  schedule:
-    - cron: "0 * * * *"   # каждый час
   workflow_dispatch:
 
 jobs:
@@ -12,17 +10,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Python
-        uses: actions/setup-python@v4
+      - uses: actions/setup-python@v4
         with:
-          python-version: "3.11"
+          python-version: '3.10'
 
-      - name: Install dependencies
-        run: pip install -r requirements.txt
+      - run: pip install feedparser requests
 
-      - name: Run bot
+      - run: python bot.py
         env:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           CHANNEL_USERNAME: ${{ secrets.CHANNEL_USERNAME }}
-          CHANNEL_LINK: ${{ secrets.CHANNEL_LINK }}
-        run: python bot.py

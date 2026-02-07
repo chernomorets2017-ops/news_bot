@@ -1,63 +1,56 @@
+import os
+import time
 import feedparser
 import requests
-import os
 from bs4 import BeautifulSoup
-import hashlib
+from telegram import Bot
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-CHANNEL = os.getenv("CHANNEL_USERNAME")
 CHANNEL_NAME = os.getenv("CHANNEL_NAME")
 
-RSS = "https://news.google.com/rss/search?q=музыка+шоу+бизнес&hl=ru&gl=RU&ceid=RU:ru"
-DB_FILE = "posted.txt"
+bot = Bot(token=BOT_TOKEN)
 
-def send_photo(text, image):
-    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendPhoto"
-    requests.post(url, data={"chat_id": CHANNEL, "caption": text, "parse_mode": "HTML"}, files={"photo": image})
+RSS_FEED = "https://news.google.com/rss?hl=ru&gl=RU&ceid=RU:ru"
 
-def send_text(text):
-    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-    requests.post(url, data={"chat_id": CHANNEL, "text": text, "parse_mode": "HTML"})
+posted = set()
 
-def get_article(url):
-    html = requests.get(url, timeout=10).text
-    soup = BeautifulSoup(html, "html.parser")
-    text = " ".join(p.text for p in soup.find_all("p")[:5])
-    img = soup.find("meta", property="og:image")
-    image = img["content"] if img else None
-    return text, image
+def get_image(url):
+    try:
+        html = requests.get(url, timeout=10).text
+        soup = BeautifulSoup(html, "html.parser")
 
-def summarize(text):
-    return text[:450] + "..." if len(text) > 450 else text
+        og = soup.find("meta", property="og:image")
+        if og and og["content"]:
+            return og["content"]
+    except:
+        pass
+    return None
 
-def load_db():
-    if not os.path.exists(DB_FILE):
-        return set()
-    return set(open(DB_FILE).read().splitlines())
 
-def save_db(h):
-    with open(DB_FILE, "a") as f:
-        f.write(h + "\n")
+def send_news():
+    feed = feedparser.parse(RSS_FEED)
 
-posted = load_db()
-feed = feedparser.parse(RSS)
+    for entry in feed.entries[:5]:
+        title = entry.title
+        link = entry.link
 
-for e in feed.entries[:1]:
-    title = e.title
-    link = e.link
+        if link in posted:
+            continue
+        posted.add(link)
 
-    h = hashlib.md5(link.encode()).hexdigest()
-    if h in posted:
-        continue
+        img = get_image(link)
 
-    article_text, image = get_article(link)
-    summary = summarize(article_text)
+        text = f"📰 *{title}*\n\n🔗 [Читать полностью]({link})"
 
-    post = f"<b>{title}</b>\n\n{summary}\n\n<a href='{link}'>Читать полностью</a>\n\n👉 <b>{CHANNEL_NAME}</b>"
+        try:
+            if img:
+                bot.send_photo(chat_id=CHANNEL_NAME, photo=img, caption=text, parse_mode="Markdown")
+            else:
+                bot.send_message(chat_id=CHANNEL_NAME, text=text, parse_mode="Markdown")
+        except Exception as e:
+            print("ERROR:", e)
 
-    if image:
-        send_photo(post, requests.get(image).content)
-    else:
-        send_text(post)
 
-    save_db(h)
+if __name__ == "__main__":
+    print("BOT RUNNING")
+    send_news()

@@ -1,101 +1,60 @@
 import os
 import json
 import feedparser
-from newspaper import Article
 from telegram import Bot
 
-# ==== SECRETS ====
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-CHANNEL_USERNAME = os.getenv("CHANNEL_USERNAME")  # @username
+CHANNEL_USERNAME = os.getenv("CHANNEL_USERNAME")
 CHANNEL_LINK = os.getenv("CHANNEL_LINK")
 
-# ==== SETTINGS ====
 RSS_FEEDS = [
     "https://news.google.com/rss/search?q=music+celebrity+news",
-    "https://news.google.com/rss/search?q=show+business+news"
 ]
 
-KEYWORDS = ["music", "song", "album", "singer", "rapper", "band", "concert", "celebrity", "музыка"]
+KEYWORDS = ["music", "album", "song", "singer", "rapper", "band"]
 POSTS_PER_RUN = 2
 FALLBACK_IMAGE = "https://i.imgur.com/8Km9tLL.jpg"
 
 bot = Bot(BOT_TOKEN)
 
 
-# ====== DEDUP ======
 def load_posted():
     try:
-        with open("posted.json", "r") as f:
-            return set(json.load(f))
+        return set(json.load(open("posted.json")))
     except:
         return set()
 
 
 def save_posted(urls):
-    with open("posted.json", "w") as f:
-        json.dump(list(urls), f)
+    json.dump(list(urls), open("posted.json", "w"))
 
 
-# ====== SUMMARY ======
-def summarize(text, max_len=450):
-    text = text.replace("\n", " ")
-    return text[:max_len] + "..." if len(text) > max_len else text
-
-
-# ====== FETCH NEWS ======
-def fetch_news():
-    news = []
-    for feed in RSS_FEEDS:
-        parsed = feedparser.parse(feed)
-        for entry in parsed.entries[:5]:
-            news.append({"title": entry.title, "url": entry.link})
-    return news
-
-
-# ====== MAIN ======
 def run():
     posted = load_posted()
-    news = fetch_news()
-
-    print("Found news:", len(news))
-
     sent = 0
 
-    for item in news:
-        if sent >= POSTS_PER_RUN:
-            break
+    for feed in RSS_FEEDS:
+        data = feedparser.parse(feed)
 
-        if any(k in item["title"].lower() for k in KEYWORDS) is False:
-            continue
+        for e in data.entries:
+            if sent >= POSTS_PER_RUN:
+                break
 
-        if item["url"] in posted:
-            continue
+            title = e.title
+            link = e.link
+            summary = e.summary if "summary" in e else ""
 
-        # Parse article
-        try:
-            article = Article(item["url"])
-            article.download()
-            article.parse()
-            text = article.text
-        except:
-            continue
+            if any(k in title.lower() for k in KEYWORDS) is False:
+                continue
+            if link in posted:
+                continue
 
-        summary = summarize(text)
+            text = f"<b>{title}</b>\n\n{summary[:400]}...\n\n<a href='{CHANNEL_LINK}'>Channel</a>"
 
-        caption = f"<b>{item['title']}</b>\n\n{summary}\n\n<a href='{CHANNEL_LINK}'>Перейти в канал</a>"
+            bot.send_photo(chat_id=CHANNEL_USERNAME, photo=FALLBACK_IMAGE, caption=text, parse_mode="HTML")
 
-        try:
-            bot.send_photo(
-                chat_id=CHANNEL_USERNAME,
-                photo=FALLBACK_IMAGE,
-                caption=caption,
-                parse_mode="HTML"
-            )
-        except:
-            bot.send_message(chat_id=CHANNEL_USERNAME, text=caption, parse_mode="HTML")
-
-        posted.add(item["url"])
-        sent += 1
+            posted.add(link)
+            sent += 1
 
     save_posted(posted)
 

@@ -1,7 +1,9 @@
-name: bot
+name: news-bot
 
 on:
   workflow_dispatch:
+  schedule:
+    - cron: "*/30 * * * *"
 
 jobs:
   run:
@@ -14,7 +16,7 @@ jobs:
         with:
           python-version: '3.10'
 
-      - run: pip install feedparser requests
+      - run: pip install feedparser requests beautifulsoup4
 
       - run: python bot.py
         env:

@@ -1,81 +1,50 @@
 import feedparser
 import requests
 from bs4 import BeautifulSoup
-from telegram import Bot
-from deep_translator import GoogleTranslator
-import json
-import os
+from config import BOT_TOKEN, CHANNEL, RSS_URL
 
-TOKEN = os.getenv("BOT_TOKEN")
-CHANNEL = os.getenv("CHANNEL_USERNAME")
-
-bot = Bot(TOKEN)
-
-RSS = "https://news.google.com/rss?hl=en&gl=US&ceid=US:en"
-DB_FILE = "posted.json"
-
-
-def load_db():
-    if not os.path.exists(DB_FILE):
-        return []
-    return json.load(open(DB_FILE))
-
-
-def save_db(data):
-    json.dump(data, open(DB_FILE, "w"))
-
-
-def get_article(url):
+def get_image(url):
     try:
-        html = requests.get(url, timeout=10).text
+        html = requests.get(url, timeout=5).text
         soup = BeautifulSoup(html, "html.parser")
-
         img = soup.find("meta", property="og:image")
-        image = img["content"] if img else None
-
-        paragraphs = soup.find_all("p")
-        text = " ".join(p.text for p in paragraphs[:3])
-
-        return image, text
+        if img:
+            return img["content"]
     except:
-        return None, ""
+        return None
 
+def send_post(title, link, image):
+    channel_link = f"https://t.me/{CHANNEL.replace('@','')}"
 
-def translate(text):
-    try:
-        return GoogleTranslator(source="auto", target="ru").translate(text)
-    except:
-        return text
+    text = f"<b>{title}</b>\n\n<a href='{channel_link}'>Читать полностью</a>"
 
+    api = f"https://api.telegram.org/bot{BOT_TOKEN}"
 
-def post_news():
-    feed = feedparser.parse(RSS)
-    posted = load_db()
+    if image:
+        data = {
+            "chat_id": CHANNEL,
+            "photo": image,
+            "caption": text,
+            "parse_mode": "HTML"
+        }
+        requests.post(api + "/sendPhoto", data=data)
+    else:
+        data = {
+            "chat_id": CHANNEL,
+            "text": text,
+            "parse_mode": "HTML"
+        }
+        requests.post(api + "/sendMessage", data=data)
 
-    for entry in feed.entries[:3]:
-        if entry.link in posted:
-            continue
+def main():
+    feed = feedparser.parse(RSS_URL)
+    entry = feed.entries[0]
 
-        title = translate(entry.title)
-        link = entry.link
+    title = entry.title
+    link = entry.link
+    image = get_image(link)
 
-        image, article_text = get_article(link)
-        article_text = translate(article_text[:1000])
+    send_post(title, link, image)
 
-        msg = f"""📰 <b>{title}</b>
-
-{article_text}
-
-<a href="https://t.me/{CHANNEL[1:]}">👉 Читать в @{CHANNEL[1:]}</a>
-"""
-
-        if image:
-            bot.send_photo(CHANNEL, image, caption=msg, parse_mode="HTML")
-        else:
-            bot.send_message(CHANNEL, msg, parse_mode="HTML")
-
-        posted.append(entry.link)
-        save_db(posted)
-
-
-post_news()
+if __name__ == "__main__":
+    main()

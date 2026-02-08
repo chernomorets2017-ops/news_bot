@@ -1,50 +1,66 @@
-import feedparser
-import requests
-from bs4 import BeautifulSoup
-from config import BOT_TOKEN, CHANNEL, RSS_URL
+import os, json, requests
+from parser import get_articles
+from sources import SOURCES
+from categories import CATEGORIES, KEYWORDS
 
-def get_image(url):
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+CHANNEL_NAME = os.getenv("CHANNEL_NAME")
+
+def load_db():
     try:
-        html = requests.get(url, timeout=5).text
-        soup = BeautifulSoup(html, "html.parser")
-        img = soup.find("meta", property="og:image")
-        if img:
-            return img["content"]
+        return json.load(open("db.json"))
     except:
-        return None
+        return []
 
-def send_post(title, link, image):
-    channel_link = f"https://t.me/{CHANNEL.replace('@','')}"
+def save_db(data):
+    json.dump(data, open("db.json", "w"))
 
-    text = f"<b>{title}</b>\n\n<a href='{channel_link}'>Читать полностью</a>"
+def detect_category(text):
+    t = text.lower()
+    for cat, words in KEYWORDS.items():
+        for w in words:
+            if w.lower() in t:
+                return CATEGORIES[cat]
+    return CATEGORIES["world"]
 
-    api = f"https://api.telegram.org/bot{BOT_TOKEN}"
+def send_photo(title, img):
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendPhoto"
+    text = f"{title}\n\n.sup.news"
+    requests.post(url, json={
+        "chat_id": CHANNEL_NAME,
+        "photo": img,
+        "caption": text
+    })
 
-    if image:
-        data = {
-            "chat_id": CHANNEL,
-            "photo": image,
-            "caption": text,
-            "parse_mode": "HTML"
-        }
-        requests.post(api + "/sendPhoto", data=data)
-    else:
-        data = {
-            "chat_id": CHANNEL,
-            "text": text,
-            "parse_mode": "HTML"
-        }
-        requests.post(api + "/sendMessage", data=data)
+def send_text(title):
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+    text = f"{title}\n\n.sup.news"
+    requests.post(url, json={
+        "chat_id": CHANNEL_NAME,
+        "text": text
+    })
 
 def main():
-    feed = feedparser.parse(RSS_URL)
-    entry = feed.entries[0]
+    db = load_db()
 
-    title = entry.title
-    link = entry.link
-    image = get_image(link)
+    for src in SOURCES:
+        for art in get_articles(src):
+            if art["title"] in db:
+                continue
 
-    send_post(title, link, image)
+            db.append(art["title"])
+            if len(db) > 500:
+                db = db[-500:]
+
+            cat = detect_category(art["title"])
+            title = f"{cat}\n\n{art['title']}"
+
+            if art["image"]:
+                send_photo(title, art["image"])
+            else:
+                send_text(title)
+
+    save_db(db)
 
 if __name__ == "__main__":
     main()

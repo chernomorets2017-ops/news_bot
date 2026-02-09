@@ -1,66 +1,81 @@
-import os, json, requests
-from parser import get_articles
-from sources import SOURCES
-from categories import CATEGORIES, KEYWORDS
+import requests, time
+from bs4 import BeautifulSoup
+from telegram import Bot
 
-BOT_TOKEN = os.getenv("BOT_TOKEN")
-CHANNEL_NAME = os.getenv("CHANNEL_NAME")
+BOT_TOKEN = "8546746980:AAF3z5K85WaBMC-SKTSTN5Tx_dXxXyZXIoQ"
+CHANNEL = "@SUP_V_BotK"
+CHANNEL_LINK = "https://t.me/SUP_V_BotK"
 
-def load_db():
+NEWS_SITES = [
+    "https://www.bbc.com/news",
+    "https://www.reuters.com/world/",
+    "https://www.rbc.ru/"
+]
+
+bot = Bot(BOT_TOKEN)
+
+def load_posted():
     try:
-        return json.load(open("db.json"))
+        return set(open("posted.txt").read().splitlines())
     except:
-        return []
+        return set()
 
-def save_db(data):
-    json.dump(data, open("db.json", "w"))
+def save_posted(link):
+    open("posted.txt", "a").write(link+"\n")
 
-def detect_category(text):
-    t = text.lower()
-    for cat, words in KEYWORDS.items():
-        for w in words:
-            if w.lower() in t:
-                return CATEGORIES[cat]
-    return CATEGORIES["world"]
+def translate(text):
+    url = "https://translate.googleapis.com/translate_a/single"
+    params = {"client":"gtx","sl":"en","tl":"ru","dt":"t","q":text}
+    return requests.get(url, params=params).json()[0][0][0]
 
-def send_photo(title, img):
-    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendPhoto"
-    text = f"{title}\n\n.sup.news"
-    requests.post(url, json={
-        "chat_id": CHANNEL_NAME,
-        "photo": img,
-        "caption": text
-    })
+def get_image(url):
+    try:
+        soup = BeautifulSoup(requests.get(url).text,"html.parser")
+        return soup.find("meta",property="og:image")["content"]
+    except:
+        return None
 
-def send_text(title):
-    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-    text = f"{title}\n\n.sup.news"
-    requests.post(url, json={
-        "chat_id": CHANNEL_NAME,
-        "text": text
-    })
+def get_description(url):
+    try:
+        soup = BeautifulSoup(requests.get(url).text,"html.parser")
+        return soup.find("meta",property="og:description")["content"]
+    except:
+        return ""
 
-def main():
-    db = load_db()
+def parse_news():
+    posted = load_posted()
 
-    for src in SOURCES:
-        for art in get_articles(src):
-            if art["title"] in db:
+    for site in NEWS_SITES:
+        soup = BeautifulSoup(requests.get(site).text,"html.parser")
+        for a in soup.find_all("a", href=True):
+            link = a["href"]
+            if not link.startswith("http"):
+                continue
+            if link in posted:
                 continue
 
-            db.append(art["title"])
-            if len(db) > 500:
-                db = db[-500:]
+            title = a.get_text().strip()
+            if len(title) < 30:
+                continue
 
-            cat = detect_category(art["title"])
-            title = f"{cat}\n\n{art['title']}"
+            desc = get_description(link)
+            img = get_image(link)
 
-            if art["image"]:
-                send_photo(title, art["image"])
-            else:
-                send_text(title)
+            if title:
+                title_ru = translate(title)
+                desc_ru = translate(desc) if desc else ""
 
-    save_db(db)
+                text = f"🌍 Мир\n\n<b>{title_ru}</b>\n\n{desc_ru}\n\n<a href='{CHANNEL_LINK}'>.sup.news</a>"
 
-if __name__ == "__main__":
-    main()
+                if img:
+                    bot.send_photo(CHANNEL, img, caption=text, parse_mode="HTML")
+                else:
+                    bot.send_message(CHANNEL, text, parse_mode="HTML")
+
+                save_posted(link)
+                time.sleep(60)
+                return
+
+while True:
+    parse_news()
+    time.sleep(3600)

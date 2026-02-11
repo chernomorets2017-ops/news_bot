@@ -1,32 +1,79 @@
+import feedparser
 import requests
 from bs4 import BeautifulSoup
+import hashlib
+import os
 
-def get_articles(url):
-    r = requests.get(url, timeout=10)
-    soup = BeautifulSoup(r.text, "html.parser")
+SENT_FILE = "sent.txt"
 
-    articles = []
 
-    for article in soup.find_all("article")[:5]:
-        title_tag = article.find("h2") or article.find("h3")
-        if not title_tag:
+if os.path.exists(SENT_FILE):
+    with open(SENT_FILE, "r") as f:
+        sent_cache = set(f.read().splitlines())
+else:
+    sent_cache = set()
+
+
+def save_hash(h):
+    with open(SENT_FILE, "a") as f:
+        f.write(h + "\n")
+
+
+def is_duplicate(text):
+    h = hashlib.md5(text.encode()).hexdigest()
+    if h in sent_cache:
+        return True
+    sent_cache.add(h)
+    save_hash(h)
+    return False
+
+
+def is_trash(text):
+    if len(text) < 150:
+        return True
+
+    trash = [
+        "Прочтите о нашем подходе",
+        "Advertisement",
+        "Subscribe",
+        "Подробнее по ссылке",
+        "Read more"
+    ]
+    return any(t.lower() in text.lower() for t in trash)
+
+
+def translate_ru(text):
+   
+    try:
+        import googletrans
+        translator = googletrans.Translator()
+        return translator.translate(text, dest="ru").text
+    except:
+        return text
+
+
+def get_news():
+    url = "https://news.google.com/rss?hl=ru&gl=RU&ceid=RU:ru"
+    feed = feedparser.parse(url)
+
+    news_list = []
+
+    for entry in feed.entries[:5]:
+        title = entry.title
+        summary = BeautifulSoup(entry.summary, "html.parser").text
+
+        text = f"{title}\n\n{summary}"
+
+        if is_trash(text):
             continue
 
-        title = title_tag.get_text(strip=True)
-        link_tag = article.find("a")
-        img_tag = article.find("img")
+        if is_duplicate(text):
+            continue
 
-        link = link_tag["href"] if link_tag and link_tag.has_attr("href") else None
-        img = img_tag["src"] if img_tag and img_tag.has_attr("src") else None
+        news_list.append({
+            "title": title,
+            "text": summary,
+            "link": entry.link
+        })
 
-        if title and link:
-            if link.startswith("/"):
-                link = url.split("/")[0] + "//" + url.split("/")[2] + link
-
-            articles.append({
-                "title": title,
-                "link": link,
-                "image": img
-            })
-
-    return articles
+    return news_list

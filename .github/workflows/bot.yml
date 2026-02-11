@@ -1,26 +1,24 @@
-name: Run bot
+name: Media News Bot
 
 on:
   schedule:
-    - cron: "0 * * * *"  
+    - cron: "0 * * * *" # каждый час
   workflow_dispatch:
 
 jobs:
-  bot:
+  run:
     runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v3
 
-      - name: Setup Python
+      - name: Install Python
         uses: actions/setup-python@v4
         with:
           python-version: "3.10"
 
-      - name: Install dependencies
-        run: |
-          pip install -r requirements.txt
+      - name: Install deps
+        run: pip install -r requirements.txt
 
       - name: Run bot
-        run: |
-          python bot.py
+        run: python bot.py

@@ -1,81 +1,32 @@
-import requests, time
-from bs4 import BeautifulSoup
-from telegram import Bot
+import telegram
+from parser import get_news
 
-BOT_TOKEN = "8546746980:AAF3z5K85WaBMC-SKTSTN5Tx_dXxXyZXIoQ"
-CHANNEL = "@SUP_V_BotK"
-CHANNEL_LINK = "https://t.me/SUP_V_BotK"
+TOKEN = "ТВОЙ_BOT_TOKEN"
+CHANNEL = "@sup_news"   # твой канал
 
-NEWS_SITES = [
-    "https://www.bbc.com/news",
-    "https://www.reuters.com/world/",
-    "https://www.rbc.ru/"
-]
+bot = telegram.Bot(token=TOKEN)
 
-bot = Bot(BOT_TOKEN)
+def send_news():
+    news = get_news()
 
-def load_posted():
-    try:
-        return set(open("posted.txt").read().splitlines())
-    except:
-        return set()
+    for n in news:
+        text = f"""🌍 *Мир*
 
-def save_posted(link):
-    open("posted.txt", "a").write(link+"\n")
+*{n['title']}*
 
-def translate(text):
-    url = "https://translate.googleapis.com/translate_a/single"
-    params = {"client":"gtx","sl":"en","tl":"ru","dt":"t","q":text}
-    return requests.get(url, params=params).json()[0][0][0]
+{n['text']}
 
-def get_image(url):
-    try:
-        soup = BeautifulSoup(requests.get(url).text,"html.parser")
-        return soup.find("meta",property="og:image")["content"]
-    except:
-        return None
+👉 [Читать в источнике]({n['link']})
+👉 [Наш канал](https://t.me/sup_news)
+"""
 
-def get_description(url):
-    try:
-        soup = BeautifulSoup(requests.get(url).text,"html.parser")
-        return soup.find("meta",property="og:description")["content"]
-    except:
-        return ""
+        bot.send_message(
+            chat_id=CHANNEL,
+            text=text,
+            parse_mode="Markdown",
+            disable_web_page_preview=False
+        )
 
-def parse_news():
-    posted = load_posted()
 
-    for site in NEWS_SITES:
-        soup = BeautifulSoup(requests.get(site).text,"html.parser")
-        for a in soup.find_all("a", href=True):
-            link = a["href"]
-            if not link.startswith("http"):
-                continue
-            if link in posted:
-                continue
-
-            title = a.get_text().strip()
-            if len(title) < 30:
-                continue
-
-            desc = get_description(link)
-            img = get_image(link)
-
-            if title:
-                title_ru = translate(title)
-                desc_ru = translate(desc) if desc else ""
-
-                text = f"🌍 Мир\n\n<b>{title_ru}</b>\n\n{desc_ru}\n\n<a href='{CHANNEL_LINK}'>.sup.news</a>"
-
-                if img:
-                    bot.send_photo(CHANNEL, img, caption=text, parse_mode="HTML")
-                else:
-                    bot.send_message(CHANNEL, text, parse_mode="HTML")
-
-                save_posted(link)
-                time.sleep(60)
-                return
-
-while True:
-    parse_news()
-    time.sleep(3600)
+if __name__ == "__main__":
+    send_news()

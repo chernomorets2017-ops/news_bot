@@ -1,8 +1,8 @@
 import telegram
 from parser import get_news
 
-TOKEN = "ТВОЙ_BOT_TOKEN"
-CHANNEL = "@sup_news"   # твой канал
+TOKEN = "8546746980:AAF3z5K85WaBMC-SKTSTN5Tx_dXxXyZXIoQ"
+CHANNEL = "@SUP_V_BotK"
 
 bot = telegram.Bot(token=TOKEN)
 

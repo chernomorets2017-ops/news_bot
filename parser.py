@@ -6,74 +6,67 @@ import os
 
 SENT_FILE = "sent.txt"
 
-
+# load sent
 if os.path.exists(SENT_FILE):
-    with open(SENT_FILE, "r") as f:
-        sent_cache = set(f.read().splitlines())
+    with open(SENT_FILE) as f:
+        SENT = set(f.read().splitlines())
 else:
-    sent_cache = set()
-
+    SENT = set()
 
 def save_hash(h):
     with open(SENT_FILE, "a") as f:
         f.write(h + "\n")
 
-
 def is_duplicate(text):
     h = hashlib.md5(text.encode()).hexdigest()
-    if h in sent_cache:
+    if h in SENT:
         return True
-    sent_cache.add(h)
+    SENT.add(h)
     save_hash(h)
     return False
 
-
-def is_trash(text):
-    if len(text) < 150:
-        return True
-
-    trash = [
-        "Прочтите о нашем подходе",
-        "Advertisement",
-        "Subscribe",
-        "Подробнее по ссылке",
-        "Read more"
-    ]
-    return any(t.lower() in text.lower() for t in trash)
-
-
-def translate_ru(text):
-   
+def extract_article(url):
     try:
-        import googletrans
-        translator = googletrans.Translator()
-        return translator.translate(text, dest="ru").text
+        html = requests.get(url, timeout=10).text
+        soup = BeautifulSoup(html, "html.parser")
+
+        # image
+        img = None
+        og = soup.find("meta", property="og:image")
+        if og:
+            img = og["content"]
+
+        # text
+        paragraphs = [p.text for p in soup.find_all("p")]
+        text = " ".join(paragraphs)[:1500]
+
+        return text, img
     except:
-        return text
+        return "", None
 
 
 def get_news():
-    url = "https://news.google.com/rss?hl=ru&gl=RU&ceid=RU:ru"
-    feed = feedparser.parse(url)
+    feed = feedparser.parse("https://news.google.com/rss?hl=ru&gl=RU&ceid=RU:ru")
 
-    news_list = []
+    result = []
 
-    for entry in feed.entries[:5]:
+    for entry in feed.entries[:10]:
         title = entry.title
-        summary = BeautifulSoup(entry.summary, "html.parser").text
+        link = entry.link
 
-        text = f"{title}\n\n{summary}"
-
-        if is_trash(text):
+        article_text, image = extract_article(link)
+        if len(article_text) < 300:
             continue
 
-        if is_duplicate(text):
+        full_text = title + article_text
+        if is_duplicate(full_text):
             continue
 
-        news_list.append({
+        result.append({
             "title": title,
-            "text": summary,
-            "link": entry.link
+            "text": article_text[:700],
+            "img": image,
+            "link": link
         })
 
-    return news_list
+    return result

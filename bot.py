@@ -6,27 +6,23 @@ CHANNEL = "@SUP_V_BotK"
 
 bot = telegram.Bot(token=TOKEN)
 
-def send_news():
+def post():
     news = get_news()
 
     for n in news:
-        text = f"""🌍 *Мир*
+        caption = f"""📰 *Актуальные новости*
 
 *{n['title']}*
 
 {n['text']}
 
-👉 [Читать в источнике]({n['link']})
-👉 [Наш канал](https://t.me/sup_news)
+🔗 [.sup.news](https://t.me/SUP_V_BotK)
 """
 
-        bot.send_message(
-            chat_id=CHANNEL,
-            text=text,
-            parse_mode="Markdown",
-            disable_web_page_preview=False
-        )
-
+        if n["img"]:
+            bot.send_photo(chat_id=CHANNEL, photo=n["img"], caption=caption, parse_mode="Markdown")
+        else:
+            bot.send_message(chat_id=CHANNEL, text=caption, parse_mode="Markdown")
 
 if __name__ == "__main__":
-    send_news()
+    post()

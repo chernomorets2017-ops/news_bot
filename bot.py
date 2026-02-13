@@ -1,28 +1,35 @@
-import telegram
+import json
+import time
+from telegram import Bot
+from config import BOT_TOKEN, CHANNEL
 from parser import get_news
 
-TOKEN = "8546746980:AAF3z5K85WaBMC-SKTSTN5Tx_dXxXyZXIoQ"
-CHANNEL = "@SUP_V_BotK"
+bot = Bot(BOT_TOKEN)
 
-bot = telegram.Bot(token=TOKEN)
+def load_posted():
+    try:
+        with open("posted.json", "r") as f:
+            return set(json.load(f))
+    except:
+        return set()
 
-def post():
+def save_posted(posted):
+    with open("posted.json", "w") as f:
+        json.dump(list(posted), f)
+
+def main():
+    posted = load_posted()
     news = get_news()
 
-    for n in news:
-        caption = f"""📰 *Актуальные новости*
+    for item in news:
+        if item in posted:
+            continue
+        
+        bot.send_message(CHANNEL, item)
+        posted.add(item)
+        time.sleep(3)
 
-*{n['title']}*
-
-{n['text']}
-
-🔗 [.sup.news](https://t.me/SUP_V_BotK)
-"""
-
-        if n["img"]:
-            bot.send_photo(chat_id=CHANNEL, photo=n["img"], caption=caption, parse_mode="Markdown")
-        else:
-            bot.send_message(chat_id=CHANNEL, text=caption, parse_mode="Markdown")
+    save_posted(posted)
 
 if __name__ == "__main__":
-    post()
+    main()

@@ -25,7 +25,7 @@ while True:
         if n["title"] in posted:
             continue
 
-        text = f"🌍 Мир\n\n{n['title']}\n\n{supnews}\n{SIGN}"
+        text = f"🌍 Мир\n\n{n['title']}\n\n{.sup.news}\n{SIGN}"
 
         bot.send_message(CHANNEL, text)
         posted.append(n["title"])

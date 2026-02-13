@@ -4,29 +4,28 @@ import hashlib
 from telegram import Bot
 from config import BOT_TOKEN, CHANNEL, SIGN_LINK
 from parser import get_news
-from ai_summarizer import summarize
+from translator import translate
 
 bot = Bot(BOT_TOKEN)
 
 def load_db():
     try:
-        with open("db.json") as f:
-            return set(json.load(f))
+        return set(json.load(open("db.json")))
     except:
         return set()
 
 def save_db(db):
-    with open("db.json", "w") as f:
-        json.dump(list(db), f)
+    json.dump(list(db), open("db.json", "w"))
 
-def hash_news(title):
-    return hashlib.md5(title.encode()).hexdigest()
+def hash_news(text):
+    return hashlib.md5(text.encode()).hexdigest()
 
-def format_post(title, link, summary):
+def format_post(title, text, link):
     return f"""🌍 <b>{title}</b>
 
-🧠 {summary}
+{text[:1000]}
 
+🔗 <a href="{link}">Читать полностью</a>
 
 <a href="{SIGN_LINK}">.sup.news</a>
 """
@@ -40,18 +39,17 @@ def main():
         if key in db:
             continue
 
-        summary = summarize(n["summary"])
-        text = format_post(n["title"], n["link"], summary)
+        title = translate(n["title"])
+        text = translate(n["text"])
 
-        bot.send_message(
-            CHANNEL,
-            text=text,
-            parse_mode="HTML",
-            disable_web_page_preview=False
-        )
+        if len(text) < 200:
+            continue
 
+        post = format_post(title, text, n["link"])
+
+        bot.send_message(CHANNEL, post, parse_mode="HTML", disable_web_page_preview=False)
         db.add(key)
-        time.sleep(4)
+        time.sleep(5)
 
     save_db(db)
 

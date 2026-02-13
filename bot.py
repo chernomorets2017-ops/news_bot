@@ -1,6 +1,6 @@
 import json
-import time
 import hashlib
+import time
 from telegram import Bot
 from config import BOT_TOKEN, CHANNEL, SIGN_LINK
 from parser import get_news
@@ -17,18 +17,8 @@ def load_db():
 def save_db(db):
     json.dump(list(db), open("db.json", "w"))
 
-def hash_news(text):
-    return hashlib.md5(text.encode()).hexdigest()
-
-def format_post(title, text, link):
-    return f"""🌍 <b>{title}</b>
-
-{text[:1000]}
-
-🔗 <a href="{link}">Читать полностью</a>
-
-<a href="{SIGN_LINK}">.sup.news</a>
-"""
+def hash_news(t):
+    return hashlib.md5(t.encode()).hexdigest()
 
 def main():
     db = load_db()
@@ -40,14 +30,20 @@ def main():
             continue
 
         title = translate(n["title"])
-        text = translate(n["text"])
+        text = translate(n["text"])[:1000]
 
-        if len(text) < 200:
-            continue
+        caption = f"""🌍 <b>{title}</b>
 
-        post = format_post(title, text, n["link"])
+{text}
 
-        bot.send_message(CHANNEL, post, parse_mode="HTML", disable_web_page_preview=False)
+<a href="{SIGN_LINK}">.sup.news</a>
+"""
+
+        if n["img"]:
+            bot.send_photo(CHANNEL, n["img"], caption=caption, parse_mode="HTML")
+        else:
+            bot.send_message(CHANNEL, caption, parse_mode="HTML")
+
         db.add(key)
         time.sleep(5)
 

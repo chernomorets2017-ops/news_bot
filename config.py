@@ -1,4 +1,4 @@
 BOT_TOKEN = "8546746980:AAF3z5K85WaBMC-SKTSTN5Tx_dXxXyZXIoQ"
 CHANNEL = "@SUP_V_BotK"
-SIGN_LINK = "https://t.me/SUP_V_BotK"
+SIGN = "https://t.me/SUP_V_BotK"
 

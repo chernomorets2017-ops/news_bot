@@ -1,44 +1,32 @@
-import feedparser
 import requests
 from bs4 import BeautifulSoup
+from deep_translator import GoogleTranslator
 
-FEEDS = [
-    "https://rss.cnn.com/rss/edition.rss",
-    "https://www.theguardian.com/world/rss",
-    "https://lenta.ru/rss/news"
+SOURCES = [
+    "https://www.bbc.com/news",
+    "https://www.reuters.com/world",
 ]
-
-def get_article(url):
-    try:
-        r = requests.get(url, timeout=10)
-        soup = BeautifulSoup(r.text, "html.parser")
-
-      
-        text = " ".join(p.text for p in soup.find_all("p"))[:3000]
-
-       
-        img = ""
-        og = soup.find("meta", property="og:image")
-        if og:
-            img = og["content"]
-
-        return text, img
-    except:
-        return "", ""
 
 def get_news():
     news = []
-    for f in FEEDS:
-        feed = feedparser.parse(f)
-        for e in feed.entries[:5]:
-            text, img = get_article(e.link)
+    for url in SOURCES:
+        try:
+            r = requests.get(url, timeout=10)
+            soup = BeautifulSoup(r.text, "html.parser")
 
-            if len(text) < 400:
-                continue
+            for item in soup.find_all("a", href=True)[:5]:
+                title = item.text.strip()
+                link = item["href"]
+                if len(title) < 20:
+                    continue
 
-            news.append({
-                "title": e.title,
-                "text": text,
-                "img": img
-            })
+                title_ru = GoogleTranslator(source="auto", target="ru").translate(title)
+
+                news.append({
+                    "title": title_ru,
+                    "link": link
+                })
+        except:
+            pass
+
     return news
